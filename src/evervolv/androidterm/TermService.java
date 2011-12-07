@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm;
+package evervolv.androidterm;
 
 import android.app.Service;
 import android.os.Binder;
@@ -24,12 +24,13 @@ import android.util.Log;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import evervolv.androidterm.R;
 
-import jackpal.androidterm.model.SessionFinishCallback;
-import jackpal.androidterm.model.UpdateCallback;
-import jackpal.androidterm.session.TermSession;
-import jackpal.androidterm.util.ServiceForegroundCompat;
-import jackpal.androidterm.util.SessionList;
+import evervolv.androidterm.model.SessionFinishCallback;
+import evervolv.androidterm.model.UpdateCallback;
+import evervolv.androidterm.session.TermSession;
+import evervolv.androidterm.util.ServiceForegroundCompat;
+import evervolv.androidterm.util.SessionList;
 
 public class TermService extends Service implements SessionFinishCallback
 {

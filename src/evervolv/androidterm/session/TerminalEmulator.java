@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm.session;
+package evervolv.androidterm.session;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -26,10 +26,10 @@ import java.nio.charset.CodingErrorAction;
 
 import android.util.Log;
 
-import jackpal.androidterm.TermDebug;
-import jackpal.androidterm.model.Screen;
-import jackpal.androidterm.util.TermSettings;
-import jackpal.androidterm.util.UnicodeTranscript;
+import evervolv.androidterm.TermDebug;
+import evervolv.androidterm.model.Screen;
+import evervolv.androidterm.util.TermSettings;
+import evervolv.androidterm.util.UnicodeTranscript;
 
 /**
  * Renders text into a screen. Contains all the terminal-specific knowlege and

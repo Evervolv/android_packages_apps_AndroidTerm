@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm;
+package evervolv.androidterm;
 
+import evervolv.androidterm.R;
 import java.io.FileDescriptor;
 
 /**
@@ -30,7 +31,7 @@ import java.io.FileDescriptor;
 public class Exec
 {
     static {
-        System.loadLibrary("jackpal-androidterm3");
+        System.loadLibrary("evervolv-androidterm3");
     }
 
     /**

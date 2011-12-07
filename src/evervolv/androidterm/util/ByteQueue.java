@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm.util;
+package evervolv.androidterm.util;
 
 /**
  * A multi-thread-safe produce-consumer byte array.

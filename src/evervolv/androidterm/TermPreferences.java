@@ -14,11 +14,20 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm.model;
+package evervolv.androidterm;
 
-/**
- * Callback to be invoked when updates to a TermSession's transcript occur.
- */
-public interface UpdateCallback {
-    void onUpdate();
+import android.os.Bundle;
+import android.preference.PreferenceActivity;
+import evervolv.androidterm.R;
+
+public class TermPreferences extends PreferenceActivity {
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        // Load the preferences from an XML resource
+        addPreferencesFromResource(R.xml.preferences);
+    }
+
 }

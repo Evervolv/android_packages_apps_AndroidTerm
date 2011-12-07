@@ -14,13 +14,20 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm.model;
+package evervolv.androidterm.model;
 
-import jackpal.androidterm.session.TermSession;
+import android.graphics.Canvas;
 
 /**
- * Callback to be invoked when a TermSession finishes.
+ * Text renderer interface
  */
-public interface SessionFinishCallback {
-    void onSessionFinish(TermSession session);
+
+public interface TextRenderer {
+    float getCharacterWidth();
+    int getCharacterHeight();
+    /** @return pixels above top row of text to avoid looking cramped. */
+    int getTopMargin();
+    void drawTextRun(Canvas canvas, float x, float y,
+            int lineOffset, int runWidth, char[] text,
+            int index, int count, boolean cursor, int foreColor, int backColor);
 }

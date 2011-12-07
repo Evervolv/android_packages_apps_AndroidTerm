@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm.session;
+package evervolv.androidterm.session;
 
 import java.util.Arrays;
 
 import android.graphics.Canvas;
 import android.util.Log;
 
-import jackpal.androidterm.model.Screen;
-import jackpal.androidterm.model.TextRenderer;
-import jackpal.androidterm.util.UnicodeTranscript;
+import evervolv.androidterm.model.Screen;
+import evervolv.androidterm.model.TextRenderer;
+import evervolv.androidterm.util.UnicodeTranscript;
 
 /**
  * A TranscriptScreen is a screen that remembers data that's been scrolled. The

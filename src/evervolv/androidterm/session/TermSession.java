@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm.session;
+package evervolv.androidterm.session;
 
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -32,12 +32,12 @@ import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
 
-import jackpal.androidterm.Exec;
-import jackpal.androidterm.TermDebug;
-import jackpal.androidterm.model.SessionFinishCallback;
-import jackpal.androidterm.model.UpdateCallback;
-import jackpal.androidterm.util.ByteQueue;
-import jackpal.androidterm.util.TermSettings;
+import evervolv.androidterm.Exec;
+import evervolv.androidterm.TermDebug;
+import evervolv.androidterm.model.SessionFinishCallback;
+import evervolv.androidterm.model.UpdateCallback;
+import evervolv.androidterm.util.ByteQueue;
+import evervolv.androidterm.util.TermSettings;
 
 /**
  * A terminal session, consisting of a TerminalEmulator, a TranscriptScreen,

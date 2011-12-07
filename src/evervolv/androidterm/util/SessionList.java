@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm.util;
+package evervolv.androidterm.util;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Collection;
 
-import jackpal.androidterm.model.UpdateCallback;
-import jackpal.androidterm.session.TermSession;
+import evervolv.androidterm.model.UpdateCallback;
+import evervolv.androidterm.session.TermSession;
 
 /**
  * An ArrayList of TermSessions which allows users to register callbacks in

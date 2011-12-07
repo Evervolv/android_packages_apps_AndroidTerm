@@ -1,4 +1,4 @@
-package jackpal.androidterm.util;
+package evervolv.androidterm.util;
 
 import android.text.AndroidCharacter;
 

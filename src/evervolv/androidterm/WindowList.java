@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm;
+package evervolv.androidterm;
 
 import android.app.ListActivity;
 import android.content.ComponentName;
@@ -32,10 +32,11 @@ import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
+import evervolv.androidterm.R;
 
-import jackpal.androidterm.model.UpdateCallback;
-import jackpal.androidterm.session.TermSession;
-import jackpal.androidterm.util.SessionList;
+import evervolv.androidterm.model.UpdateCallback;
+import evervolv.androidterm.session.TermSession;
+import evervolv.androidterm.util.SessionList;
 
 public class WindowList extends ListActivity {
     private SessionList sessions;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm;
+package evervolv.androidterm;
 
 import java.io.UnsupportedEncodingException;
 
@@ -49,12 +49,13 @@ import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 import android.widget.Toast;
+import evervolv.androidterm.R;
 
-import jackpal.androidterm.model.UpdateCallback;
-import jackpal.androidterm.session.TermSession;
-import jackpal.androidterm.util.AndroidCompat;
-import jackpal.androidterm.util.SessionList;
-import jackpal.androidterm.util.TermSettings;
+import evervolv.androidterm.model.UpdateCallback;
+import evervolv.androidterm.session.TermSession;
+import evervolv.androidterm.util.AndroidCompat;
+import evervolv.androidterm.util.SessionList;
+import evervolv.androidterm.util.TermSettings;
 
 /**
  * A terminal emulator activity.
@@ -86,7 +87,7 @@ public class Term extends Activity implements UpdateCallback {
     private Intent TSIntent;
 
     public static final int REQUEST_CHOOSE_WINDOW = 1;
-    public static final String EXTRA_WINDOW_ID = "jackpal.androidterm.window_id";
+    public static final String EXTRA_WINDOW_ID = "evervolv.androidterm.window_id";
     private int onResumeSelectWindow = -1;
 
     private PowerManager.WakeLock mWakeLock;
@@ -181,7 +182,7 @@ public class Term extends Activity implements UpdateCallback {
          * launching application
          */
         String initialCommand = mSettings.getInitialCommand();
-        String iInitialCommand = getIntent().getStringExtra("jackpal.androidterm.iInitialCommand");
+        String iInitialCommand = getIntent().getStringExtra("evervolv.androidterm.iInitialCommand");
         if (iInitialCommand != null) {
             if (initialCommand != null) {
                 initialCommand += "\r" + iInitialCommand;

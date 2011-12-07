@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm;
+package evervolv.androidterm;
+
+import evervolv.androidterm.R;
 
 /**
  * Debug settings.

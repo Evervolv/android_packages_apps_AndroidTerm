@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm;
+package evervolv.androidterm;
 
 import java.io.IOException;
 
@@ -45,14 +45,15 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
+import evervolv.androidterm.R;
 
-import jackpal.androidterm.model.TextRenderer;
-import jackpal.androidterm.model.UpdateCallback;
-import jackpal.androidterm.session.TerminalEmulator;
-import jackpal.androidterm.session.TermSession;
-import jackpal.androidterm.session.TranscriptScreen;
-import jackpal.androidterm.util.AndroidCompat;
-import jackpal.androidterm.util.TermSettings;
+import evervolv.androidterm.model.TextRenderer;
+import evervolv.androidterm.model.UpdateCallback;
+import evervolv.androidterm.session.TerminalEmulator;
+import evervolv.androidterm.session.TermSession;
+import evervolv.androidterm.session.TranscriptScreen;
+import evervolv.androidterm.util.AndroidCompat;
+import evervolv.androidterm.util.TermSettings;
 
 /**
  * A view on a transcript and a terminal emulator. Displays the text of the

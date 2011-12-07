@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package jackpal.androidterm;
+package evervolv.androidterm;
 
 import java.util.Iterator;
 
@@ -23,6 +23,7 @@ import android.util.AttributeSet;
 import android.view.View;
 import android.widget.Toast;
 import android.widget.ViewFlipper;
+import evervolv.androidterm.R;
 
 public class TermViewFlipper extends ViewFlipper implements Iterable<View> {
     private Context context;

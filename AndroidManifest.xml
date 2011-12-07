@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="jackpal.androidterm"
+    package="evervolv.androidterm"
       android:versionName="1.0.39" android:versionCode="40"
       android:installLocation="auto">
     <uses-permission android:name="android.permission.INTERNET" />
