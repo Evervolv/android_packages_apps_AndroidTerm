@@ -30,7 +30,7 @@ LOCAL_PACKAGE_NAME := AndroidTerm
 
 LOCAL_MODULE_TAGS := optional
 
-LOCAL_JNI_SHARED_LIBRARIES := libevervolv-androidterm3
+LOCAL_REQUIRED_MODULES := libevervolv-androidterm3
 
 include $(BUILD_PACKAGE)
 
