@@ -312,7 +312,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         outAttrs.inputType = mUseCookedIme ?
                 EditorInfo.TYPE_CLASS_TEXT :
                 EditorInfo.TYPE_NULL;
-        return new BaseInputConnection(this, false) {
+        return new InputConnection() {
             private boolean mInBatchEdit;
             /**
              * Used to handle composing text requests
