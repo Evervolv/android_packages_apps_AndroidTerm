@@ -32,27 +32,25 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.ClipboardManager;
-import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.CompletionInfo;
+import android.view.inputmethod.CorrectionInfo;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
-import evervolv.androidterm.R;
 
+import evervolv.androidterm.compat.AndroidCompat;
 import evervolv.androidterm.model.TextRenderer;
 import evervolv.androidterm.model.UpdateCallback;
 import evervolv.androidterm.session.TerminalEmulator;
 import evervolv.androidterm.session.TermSession;
 import evervolv.androidterm.session.TranscriptScreen;
-import evervolv.androidterm.util.AndroidCompat;
 import evervolv.androidterm.util.TermSettings;
 
 /**
@@ -65,7 +63,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     private final boolean LOG_KEY_EVENTS = TermDebug.DEBUG && false;
 
     private TermSettings mSettings;
-    private TermViewFlipper mViewFlipper;
 
     /**
      * We defer some initialization until we have been layed out in the view
@@ -169,6 +166,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     private boolean mIsSelectingText = false;
 
+    private boolean mIsControlKeySent = false;
+    private boolean mIsFnKeySent = false;
+
 
     private float mDensity;
 
@@ -180,6 +180,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     private int mSelY1 = -1;
     private int mSelX2 = -1;
     private int mSelY2 = -1;
+
+    private boolean mIsActive = false;
 
     /**
      * True if we must poll to discover if the view has changed size.
@@ -211,10 +213,17 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     };
 
     private GestureDetector mGestureDetector;
+    private GestureDetector.OnGestureListener mExtGestureListener;
     private float mScrollRemainder;
     private TermKeyListener mKeyListener;
+    private WindowSizeCallback mSizeCallback;
 
     private String mImeBuffer = "";
+
+    // Used by activity to inform us how much of the window belongs to us
+    public interface WindowSizeCallback {
+        public abstract void onGetSize(Rect rect);
+    }
 
     /**
      * Our message handler class. Implements a periodic callback.
@@ -238,9 +247,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         }
     };
 
-    public EmulatorView(Context context, TermSession session, TermViewFlipper viewFlipper, DisplayMetrics metrics) {
+    public EmulatorView(Context context, TermSession session, DisplayMetrics metrics) {
         super(context);
-        commonConstructor(context, session, viewFlipper);
+        commonConstructor(context, session);
         setDensity(metrics);
     }
 
@@ -250,6 +259,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     }
 
     public void onResume() {
+        mIsActive = true;
         updateSize(false);
         if (mbPollForWindowSizeChange) {
             mHandler.postDelayed(mCheckSize, SCREEN_CHECK_PERIOD);
@@ -266,6 +276,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         if (mCursorBlink != 0) {
             mHandler.removeCallbacks(mBlinkCursor);
         }
+        mIsActive = false;
     }
 
     public void updatePrefs(TermSettings settings) {
@@ -351,6 +362,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 } else {
                     mKeyListener.handleKeyCode(result - TermKeyListener.KEYCODE_OFFSET, getKeypadApplicationMode());
                 }
+                clearSpecialKeyStatus();
             }
 
             public boolean beginBatchEdit() {
@@ -457,14 +469,12 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 return true;
             }
 
-            /** API Level 11, we are currently at API level 10, so don't use this.
             public boolean commitCorrection (CorrectionInfo correctionInfo) {
                 if (TermDebug.LOG_IME) {
                     Log.w(TAG, "commitCorrection");
                 }
                 return true;
             }
-            */
 
             public boolean commitText(CharSequence text, int newCursorPosition) {
                 if (TermDebug.LOG_IME) {
@@ -593,7 +603,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         return mEmulator.getKeypadApplicationMode();
     }
 
-    private void commonConstructor(Context context, TermSession session, TermViewFlipper viewFlipper) {
+    private void commonConstructor(Context context, TermSession session) {
         mTextRenderer = null;
         mCursorPaint = new Paint();
         mCursorPaint.setARGB(255,128,128,128);
@@ -606,10 +616,18 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         setFocusable(true);
         setFocusableInTouchMode(true);
 
-        initialize(session, viewFlipper);
+        initialize(session);
         session.setUpdateCallback(mUpdateNotify);
         // XXX We should really be able to fetch this from within TermSession
         session.setProcessExitMessage(context.getString(R.string.process_exit_message));
+    }
+
+    public void setWindowSizeCallback(WindowSizeCallback callback) {
+        mSizeCallback = callback;
+    }
+
+    public void setExtGestureListener(GestureDetector.OnGestureListener listener) {
+        mExtGestureListener = listener;
     }
 
     @Override
@@ -632,12 +650,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      *
      * @param session The terminal session this view will be displaying
      */
-    private void initialize(TermSession session, TermViewFlipper viewFlipper) {
+    private void initialize(TermSession session) {
         mTermSession = session;
         mTranscriptScreen = session.getTranscriptScreen();
         mEmulator = session.getEmulator();
-
-        mViewFlipper = viewFlipper;
 
         mKeyListener = new TermKeyListener(session);
         mTextSize = 10;
@@ -650,6 +666,14 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     public TermSession getTermSession() {
         return mTermSession;
+    }
+
+    public int getVisibleWidth() {
+        return mVisibleWidth;
+    }
+
+    public int getVisibleHeight() {
+        return mVisibleHeight;
     }
 
     /**
@@ -705,15 +729,22 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     // Begin GestureDetector.OnGestureListener methods
 
     public boolean onSingleTapUp(MotionEvent e) {
+        if (mExtGestureListener != null && mExtGestureListener.onSingleTapUp(e)) {
+            return true;
+        }
         return true;
     }
 
     public void onLongPress(MotionEvent e) {
+        // XXX hook into external gesture listener
         showContextMenu();
     }
 
     public boolean onScroll(MotionEvent e1, MotionEvent e2,
             float distanceX, float distanceY) {
+        if (mExtGestureListener != null && mExtGestureListener.onScroll(e1, e2, distanceX, distanceY)) {
+            return true;
+        }
         distanceY += mScrollRemainder;
         int deltaRows = (int) (distanceY / mCharacterHeight);
         mScrollRemainder = distanceY - deltaRows * mCharacterHeight;
@@ -723,7 +754,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         invalidate();
 
         return true;
-   }
+    }
 
     public void onSingleTapConfirmed(MotionEvent e) {
     }
@@ -744,27 +775,25 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX,
             float velocityY) {
-        if (Math.abs(velocityX) > Math.abs(velocityY)) {
-            // Assume user wanted side to side movement
-            if (velocityX > 0) {
-                // Left to right swipe -- previous window
-                mViewFlipper.showPrevious();
-            } else {
-                // Right to left swipe -- next window
-                mViewFlipper.showNext();
-            }
-        } else {
-            // TODO: add animation man's (non animated) fling
-            mScrollRemainder = 0.0f;
-            onScroll(e1, e2, 0.1f * velocityX, -0.1f * velocityY);
+        if (mExtGestureListener != null && mExtGestureListener.onFling(e1, e2, velocityX, velocityY)) {
+            return true;
         }
+        // TODO: add animation man's (non animated) fling
+        mScrollRemainder = 0.0f;
+        onScroll(e1, e2, 0.1f * velocityX, -0.1f * velocityY);
         return true;
     }
 
     public void onShowPress(MotionEvent e) {
+        if (mExtGestureListener != null) {
+            mExtGestureListener.onShowPress(e);
+        }
     }
 
     public boolean onDown(MotionEvent e) {
+        if (mExtGestureListener != null && mExtGestureListener.onDown(e)) {
+            return true;
+        }
         mScrollRemainder = 0.0f;
         return true;
     }
@@ -779,6 +808,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         }
     }
 
+    @SuppressWarnings("deprecation")
     private boolean onTouchEventWhileSelectingText(MotionEvent ev) {
         int action = ev.getAction();
         int cx = (int)(ev.getX() / mCharacterWidth);
@@ -869,6 +899,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         }
 
         mKeyListener.keyUp(keyCode);
+        clearSpecialKeyStatus();
         return true;
     }
 
@@ -897,6 +928,17 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     private boolean isSystemKey(int keyCode, KeyEvent event) {
         return event.isSystem();
+    }
+
+    private void clearSpecialKeyStatus() {
+        if (mIsControlKeySent) {
+            mIsControlKeySent = false;
+            mKeyListener.handleControlKey(false);
+        }
+        if (mIsFnKeySent) {
+            mIsFnKeySent = false;
+            mKeyListener.handleFnKey(false);
+        }
     }
 
     private void updateText() {
@@ -949,6 +991,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                     mVisibleRect.top = 0;
                 }
             }
+            if (mSizeCallback != null) {
+                // Let activity adjust our size
+                mSizeCallback.onGetSize(mVisibleRect);
+            }
             int w = mVisibleRect.width();
             int h = mVisibleRect.height();
             // Log.w("Term", "(" + w + ", " + h + ")");
@@ -967,7 +1013,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        if (this == mViewFlipper.getCurrentView()) {
+        if (mIsActive) {
             updateSize(false);
         }
     }
@@ -1036,6 +1082,16 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     public String getSelectedText() {
         return mEmulator.getSelectedText(mSelX1, mSelY1, mSelX2, mSelY2);
+    }
+
+    public void sendControlKey() {
+        mIsControlKeySent = true;
+        mKeyListener.handleControlKey(true);
+    }
+
+    public void sendFnKey() {
+        mIsFnKeySent = true;
+        mKeyListener.handleFnKey(true);
     }
 }
 

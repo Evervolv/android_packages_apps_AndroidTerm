@@ -16,8 +16,6 @@
 
 package evervolv.androidterm;
 
-import evervolv.androidterm.R;
-
 /**
  * Debug settings.
  */

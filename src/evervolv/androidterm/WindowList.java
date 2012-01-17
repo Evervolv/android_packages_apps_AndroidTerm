@@ -25,64 +25,20 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
-import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.ListView;
-import android.widget.TextView;
-import evervolv.androidterm.R;
 
-import evervolv.androidterm.model.UpdateCallback;
-import evervolv.androidterm.session.TermSession;
+import evervolv.androidterm.compat.ActionBarCompat;
+import evervolv.androidterm.compat.ActivityCompat;
+import evervolv.androidterm.compat.AndroidCompat;
 import evervolv.androidterm.util.SessionList;
 
 public class WindowList extends ListActivity {
     private SessionList sessions;
     private WindowListAdapter mWindowListAdapter;
     private TermService mTermService;
-
-    class WindowListAdapter extends BaseAdapter implements UpdateCallback {
-        private LayoutInflater inflater = getLayoutInflater();
-
-        public int getCount() {
-            return sessions.size();
-        }
-
-        public Object getItem(int position) {
-            return sessions.get(position);
-        }
-
-        public long getItemId(int position) {
-            return position;
-        }
-
-        public View getView(int position, View convertView, ViewGroup parent) {
-            View child = inflater.inflate(R.layout.window_list_item, parent, false);
-            TextView label = (TextView) child.findViewById(R.id.window_list_label);
-            label.setText(getString(R.string.window_title, position + 1));
-
-            View close = child.findViewById(R.id.window_list_close);
-            final TermService service = mTermService;
-            final int closePosition = position;
-            close.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    TermSession session = service.getSessions().remove(closePosition);
-                    if (session != null) {
-                        session.finish();
-                        notifyDataSetChanged();
-                    }
-                }
-            });
-
-            return child;
-        }
-
-        public void onUpdate() {
-            notifyDataSetChanged();
-        }
-    }
 
     /**
      * View which isn't automatically in the pressed state if its parent is
@@ -128,13 +84,19 @@ public class WindowList extends ListActivity {
     public void onCreate(Bundle icicle) {
         super.onCreate(icicle);
 
-        setTitle(R.string.window_list);
-
         ListView listView = getListView();
         View newWindow = getLayoutInflater().inflate(R.layout.window_list_new_window, listView, false);
         listView.addHeaderView(newWindow, null, true);
 
         setResult(RESULT_CANCELED);
+
+        // Display up indicator on action bar home button
+        if (AndroidCompat.SDK >= 11) {
+            ActionBarCompat bar = ActivityCompat.getActionBar(this);
+            if (bar != null) {
+                bar.setDisplayOptions(ActionBarCompat.DISPLAY_HOME_AS_UP, ActionBarCompat.DISPLAY_HOME_AS_UP);
+            }
+        }
     }
 
     @Override
@@ -154,6 +116,9 @@ public class WindowList extends ListActivity {
         if (sessions != null) {
             sessions.removeCallback(mWindowListAdapter);
         }
+        if (mWindowListAdapter != null) {
+            mWindowListAdapter.setSessions(null);
+        }
         unbindService(mTSConnection);
     }
 
@@ -161,11 +126,11 @@ public class WindowList extends ListActivity {
         sessions = mTermService.getSessions();
 
         if (mWindowListAdapter == null) {
-            WindowListAdapter adapter = new WindowListAdapter();
+            WindowListAdapter adapter = new WindowListAdapter(sessions);
             setListAdapter(adapter);
             mWindowListAdapter = adapter;
         } else {
-            mWindowListAdapter.notifyDataSetChanged();
+            mWindowListAdapter.setSessions(sessions);
         }
         sessions.addCallback(mWindowListAdapter);
     }
@@ -176,5 +141,17 @@ public class WindowList extends ListActivity {
         data.putExtra(Term.EXTRA_WINDOW_ID, position-1);
         setResult(RESULT_OK, data);
         finish();
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+        case ActionBarCompat.ID_HOME:
+            // Action bar home button selected
+            finish();
+            return true;
+        default:
+            return super.onOptionsItemSelected(item);
+        }
     }
 }

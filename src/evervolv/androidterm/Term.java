@@ -22,11 +22,13 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.ServiceConnection;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
@@ -38,22 +40,27 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
+import android.view.GestureDetector.SimpleOnGestureListener;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 import android.widget.Toast;
-import evervolv.androidterm.R;
 
+import evervolv.androidterm.compat.ActionBarCompat;
+import evervolv.androidterm.compat.ActivityCompat;
+import evervolv.androidterm.compat.AndroidCompat;
+import evervolv.androidterm.compat.MenuItemCompat;
 import evervolv.androidterm.model.UpdateCallback;
 import evervolv.androidterm.session.TermSession;
-import evervolv.androidterm.util.AndroidCompat;
 import evervolv.androidterm.util.SessionList;
 import evervolv.androidterm.util.TermSettings;
 
@@ -80,6 +87,8 @@ public class Term extends Activity implements UpdateCallback {
     private final static int SELECT_TEXT_ID = 0;
     private final static int COPY_ALL_ID = 1;
     private final static int PASTE_ID = 2;
+    private final static int SEND_CONTROL_KEY_ID = 3;
+    private final static int SEND_FN_KEY_ID = 4;
 
     private boolean mAlreadyStarted = false;
     private boolean mStopServiceOnFinish = false;
@@ -92,6 +101,8 @@ public class Term extends Activity implements UpdateCallback {
 
     private PowerManager.WakeLock mWakeLock;
     private WifiManager.WifiLock mWifiLock;
+    // Available on API 12 and later
+    private static final int WIFI_MODE_FULL_HIGH_PERF = 3;
 
     private boolean mBackKeyPressed;
 
@@ -102,10 +113,113 @@ public class Term extends Activity implements UpdateCallback {
             TermService.TSBinder binder = (TermService.TSBinder) service;
             mTermService = binder.getService();
             populateViewFlipper();
+            populateWindowList();
         }
 
         public void onServiceDisconnected(ComponentName arg0) {
             mTermService = null;
+        }
+    };
+
+    private ActionBarCompat mActionBar;
+    private int mActionBarMode = TermSettings.ACTION_BAR_MODE_NONE;
+
+    private WindowListAdapter mWinListAdapter;
+    private class WindowListActionBarAdapter extends WindowListAdapter implements UpdateCallback {
+        // From android.R.style in API 13
+        private static final int TextAppearance_Holo_Widget_ActionBar_Title = 0x01030112;
+
+        public WindowListActionBarAdapter(SessionList sessions) {
+            super(sessions);
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            TextView label = new TextView(Term.this);
+            label.setText(getString(R.string.window_title, position + 1));
+            if (AndroidCompat.SDK >= 13) {
+                label.setTextAppearance(Term.this, TextAppearance_Holo_Widget_ActionBar_Title);
+            } else {
+                label.setTextAppearance(Term.this, android.R.style.TextAppearance_Medium);
+            }
+            return label;
+        }
+
+        @Override
+        public View getDropDownView(int position, View convertView, ViewGroup parent) {
+            return super.getView(position, convertView, parent);
+        }
+
+        public void onUpdate() {
+            notifyDataSetChanged();
+            mActionBar.setSelectedNavigationItem(mViewFlipper.getDisplayedChild());
+        }
+    }
+
+    private ActionBarCompat.OnNavigationListener mWinListItemSelected = new ActionBarCompat.OnNavigationListener() {
+        public boolean onNavigationItemSelected(int position, long id) {
+            int oldPosition = mViewFlipper.getDisplayedChild();
+            if (position != oldPosition) {
+                mViewFlipper.setDisplayedChild(position);
+                if (mActionBarMode == TermSettings.ACTION_BAR_MODE_HIDES) {
+                    mActionBar.hide();
+                }
+            }
+            return true;
+        }
+    };
+
+    private boolean mHaveFullHwKeyboard = false;
+
+    private class EmulatorViewGestureListener extends SimpleOnGestureListener {
+        private EmulatorView view;
+
+        public EmulatorViewGestureListener(EmulatorView view) {
+            this.view = view;
+        }
+
+        @Override
+        public boolean onSingleTapUp(MotionEvent e) {
+            doUIToggle((int) e.getX(), (int) e.getY(), view.getVisibleWidth(), view.getVisibleHeight());
+            return true;
+        }
+
+        @Override
+        public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+            if (Math.abs(velocityX) > 2*Math.abs(velocityY)) {
+                // Assume user wanted side to side movement
+                if (velocityX > 0) {
+                    // Left to right swipe -- previous window
+                    mViewFlipper.showPrevious();
+                } else {
+                    // Right to left swipe -- next window
+                    mViewFlipper.showNext();
+                }
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    private EmulatorView.WindowSizeCallback mSizeCallback = new EmulatorView.WindowSizeCallback() {
+        public void onGetSize(Rect rect) {
+            if (mActionBarMode == TermSettings.ACTION_BAR_MODE_ALWAYS_VISIBLE) {
+                // Fixed action bar takes space away from the EmulatorView
+                rect.top += mActionBar.getHeight();
+            }
+        }
+    };
+    private View.OnKeyListener mBackKeyListener = new View.OnKeyListener() {
+        public boolean onKey(View v, int keyCode, KeyEvent event) {
+            if (keyCode == KeyEvent.KEYCODE_BACK && mActionBarMode == TermSettings.ACTION_BAR_MODE_HIDES && mActionBar.isShowing()) {
+                /* We need to intercept the key event before the view sees it,
+                   otherwise the view will handle it before we get it */
+                onKeyUp(keyCode, event);
+                return true;
+            } else {
+                return false;
+            }
         }
     };
 
@@ -123,13 +237,39 @@ public class Term extends Activity implements UpdateCallback {
             Log.w(TermDebug.LOG_TAG, "bind to service failed!");
         }
 
+        if (AndroidCompat.SDK >= 11) {
+            int actionBarMode = mSettings.actionBarMode();
+            mActionBarMode = actionBarMode;
+            switch (actionBarMode) {
+            case TermSettings.ACTION_BAR_MODE_ALWAYS_VISIBLE:
+                setTheme(R.style.Theme_Holo);
+                break;
+            case TermSettings.ACTION_BAR_MODE_HIDES:
+                setTheme(R.style.Theme_Holo_ActionBarOverlay);
+                break;
+            }
+        }
+
         setContentView(R.layout.term_activity);
         mViewFlipper = (TermViewFlipper) findViewById(VIEW_FLIPPER);
 
         PowerManager pm = (PowerManager)getSystemService(Context.POWER_SERVICE);
         mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TermDebug.LOG_TAG);
         WifiManager wm = (WifiManager)getSystemService(Context.WIFI_SERVICE);
-        mWifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL, TermDebug.LOG_TAG);
+        int wifiLockMode = WifiManager.WIFI_MODE_FULL;
+        if (AndroidCompat.SDK >= 12) {
+            wifiLockMode = WIFI_MODE_FULL_HIGH_PERF;
+        }
+        mWifiLock = wm.createWifiLock(wifiLockMode, TermDebug.LOG_TAG);
+
+        ActionBarCompat actionBar = ActivityCompat.getActionBar(this);
+        if (actionBar != null) {
+            mActionBar = actionBar;
+            actionBar.setNavigationMode(ActionBarCompat.NAVIGATION_MODE_LIST);
+            actionBar.setDisplayOptions(0, ActionBarCompat.DISPLAY_SHOW_TITLE);
+        }
+
+        mHaveFullHwKeyboard = checkHaveFullHwKeyboard(getResources().getConfiguration());
 
         updatePrefs();
         mAlreadyStarted = true;
@@ -151,6 +291,25 @@ public class Term extends Activity implements UpdateCallback {
 
             updatePrefs();
             mViewFlipper.resumeCurrentView();
+        }
+    }
+
+    private void populateWindowList() {
+        if (mActionBar == null) {
+            // Not needed
+            return;
+        }
+
+        if (mTermSessions != null) {
+            if (mWinListAdapter == null) {
+                WindowListAdapter adapter = new WindowListActionBarAdapter(mTermSessions);
+                mWinListAdapter = adapter;
+                mTermSessions.addCallback(adapter);
+                mViewFlipper.addCallback(adapter);
+                mActionBar.setListNavigationCallbacks(mWinListAdapter, mWinListItemSelected);
+            } else {
+                mWinListAdapter.setSessions(mTermSessions);
+            }
         }
     }
 
@@ -197,7 +356,7 @@ public class Term extends Activity implements UpdateCallback {
     private EmulatorView createEmulatorView(TermSession session) {
         DisplayMetrics metrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        EmulatorView emulatorView = new EmulatorView(this, session, mViewFlipper, metrics);
+        EmulatorView emulatorView = new EmulatorView(this, session, metrics);
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -206,6 +365,9 @@ public class Term extends Activity implements UpdateCallback {
         );
         emulatorView.setLayoutParams(params);
 
+        emulatorView.setExtGestureListener(new EmulatorViewGestureListener(emulatorView));
+        emulatorView.setWindowSizeCallback(mSizeCallback);
+        emulatorView.setOnKeyListener(mBackKeyListener);
         registerForContextMenu(emulatorView);
 
         return emulatorView;
@@ -237,13 +399,16 @@ public class Term extends Activity implements UpdateCallback {
             WindowManager.LayoutParams params = win.getAttributes();
             final int FULLSCREEN = WindowManager.LayoutParams.FLAG_FULLSCREEN;
             int desiredFlag = mSettings.showStatusBar() ? 0 : FULLSCREEN;
-            if (desiredFlag != (params.flags & FULLSCREEN)) {
+            if (desiredFlag != (params.flags & FULLSCREEN) || (AndroidCompat.SDK >= 11 && mActionBarMode != mSettings.actionBarMode())) {
                 if (mAlreadyStarted) {
                     // Can't switch to/from fullscreen after
                     // starting the activity.
                     restart();
                 } else {
                     win.setFlags(desiredFlag, FULLSCREEN);
+                    if (mActionBarMode == TermSettings.ACTION_BAR_MODE_HIDES) {
+                        mActionBar.hide();
+                    }
                 }
             }
         }
@@ -255,6 +420,10 @@ public class Term extends Activity implements UpdateCallback {
 
         if (mTermSessions != null) {
             mTermSessions.addCallback(this);
+            if (mWinListAdapter != null) {
+                mTermSessions.addCallback(mWinListAdapter);
+                mViewFlipper.addCallback(mWinListAdapter);
+            }
         }
         if (mTermSessions != null && mTermSessions.size() < mViewFlipper.getChildCount()) {
             for (int i = 0; i < mViewFlipper.getChildCount(); ++i) {
@@ -286,6 +455,10 @@ public class Term extends Activity implements UpdateCallback {
         mViewFlipper.pauseCurrentView();
         if (mTermSessions != null) {
             mTermSessions.removeCallback(this);
+            if (mWinListAdapter != null) {
+                mTermSessions.removeCallback(mWinListAdapter);
+                mViewFlipper.removeCallback(mWinListAdapter);
+            }
         }
 
         if (AndroidCompat.SDK < 5) {
@@ -308,19 +481,33 @@ public class Term extends Activity implements UpdateCallback {
         }.start();
     }
 
+    private boolean checkHaveFullHwKeyboard(Configuration c) {
+        return (c.keyboard == Configuration.KEYBOARD_QWERTY) &&
+            (c.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO);
+    }
+
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
 
+        mHaveFullHwKeyboard = checkHaveFullHwKeyboard(newConfig);
+
         EmulatorView v = (EmulatorView) mViewFlipper.getCurrentView();
         if (v != null) {
             v.updateSize(true);
+        }
+
+        if (mWinListAdapter != null) {
+            // Force Android to redraw the label in the navigation dropdown
+            mWinListAdapter.notifyDataSetChanged();
         }
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main, menu);
+        MenuItemCompat.setShowAsAction(menu.findItem(R.id.menu_new_window), MenuItemCompat.SHOW_AS_ACTION_ALWAYS);
+        MenuItemCompat.setShowAsAction(menu.findItem(R.id.menu_close_window), MenuItemCompat.SHOW_AS_ACTION_IF_ROOM);
         return true;
     }
 
@@ -332,11 +519,14 @@ public class Term extends Activity implements UpdateCallback {
         } else if (id == R.id.menu_new_window) {
             doCreateNewWindow();
         } else if (id == R.id.menu_close_window) {
-            doCloseWindow();
+            confirmCloseWindow();
         } else if (id == R.id.menu_window_list) {
             startActivityForResult(new Intent(this, WindowList.class), REQUEST_CHOOSE_WINDOW);
         } else if (id == R.id.menu_reset) {
             doResetTerminal();
+            Toast toast = Toast.makeText(this,R.string.reset_toast_notification,Toast.LENGTH_LONG);
+            toast.setGravity(Gravity.CENTER, 0, 0);
+            toast.show();
         } else if (id == R.id.menu_send_email) {
             doEmailTranscript();
         } else if (id == R.id.menu_special_keys) {
@@ -347,6 +537,10 @@ public class Term extends Activity implements UpdateCallback {
             doToggleWakeLock();
         } else if (id == R.id.menu_toggle_wifilock) {
             doToggleWifiLock();
+        }
+        // Hide the action bar if appropriate
+        if (mActionBarMode == TermSettings.ACTION_BAR_MODE_HIDES) {
+            mActionBar.hide();
         }
         return super.onOptionsItemSelected(item);
     }
@@ -365,6 +559,19 @@ public class Term extends Activity implements UpdateCallback {
 
         mViewFlipper.addView(view);
         mViewFlipper.setDisplayedChild(mViewFlipper.getChildCount()-1);
+    }
+
+    private void confirmCloseWindow() {
+        final AlertDialog.Builder b = new AlertDialog.Builder(this);
+        b.setIcon(android.R.drawable.ic_dialog_alert);
+        b.setMessage(R.string.confirm_window_close_message);
+        b.setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+           public void onClick(DialogInterface dialog, int id) {
+               doCloseWindow();
+           }
+        });
+        b.setNegativeButton(android.R.string.no, null);
+        b.show();
     }
 
     private void doCloseWindow() {
@@ -436,6 +643,8 @@ public class Term extends Activity implements UpdateCallback {
       menu.add(0, SELECT_TEXT_ID, 0, R.string.select_text);
       menu.add(0, COPY_ALL_ID, 0, R.string.copy_all);
       menu.add(0, PASTE_ID, 0,  R.string.paste);
+      menu.add(0, SEND_CONTROL_KEY_ID, 0, R.string.send_control_key);
+      menu.add(0, SEND_FN_KEY_ID, 0, R.string.send_fn_key);
       if (!canPaste()) {
           menu.getItem(PASTE_ID).setEnabled(false);
       }
@@ -452,6 +661,12 @@ public class Term extends Activity implements UpdateCallback {
             return true;
           case PASTE_ID:
             doPaste();
+            return true;
+          case SEND_CONTROL_KEY_ID:
+            doSendControlKey();
+            return true;
+          case SEND_FN_KEY_ID:
+            doSendFnKey();
             return true;
           default:
             return super.onContextItemSelected(item);
@@ -487,6 +702,10 @@ public class Term extends Activity implements UpdateCallback {
                 }
                 mBackKeyPressed = false;
             }
+            if (mActionBarMode == TermSettings.ACTION_BAR_MODE_HIDES && mActionBar.isShowing()) {
+                mActionBar.hide();
+                return true;
+            }
             switch (mSettings.getBackKeyAction()) {
             case TermSettings.BACK_KEY_STOPS_SERVICE:
                 mStopServiceOnFinish = true;
@@ -498,6 +717,13 @@ public class Term extends Activity implements UpdateCallback {
                 return true;
             default:
                 return false;
+            }
+        case KeyEvent.KEYCODE_MENU:
+            if (mActionBar != null && !mActionBar.isShowing()) {
+                mActionBar.show();
+                return true;
+            } else {
+                return super.onKeyUp(keyCode, event);
             }
         default:
             return super.onKeyUp(keyCode, event);
@@ -578,6 +804,14 @@ public class Term extends Activity implements UpdateCallback {
         getCurrentTermSession().write(paste.toString());
     }
 
+    private void doSendControlKey() {
+        getCurrentEmulatorView().sendControlKey();
+    }
+
+    private void doSendFnKey() {
+        getCurrentEmulatorView().sendFnKey();
+    }
+
     private void doDocumentKeys() {
         AlertDialog.Builder dialog = new AlertDialog.Builder(this);
         Resources r = getResources();
@@ -622,6 +856,7 @@ public class Term extends Activity implements UpdateCallback {
         } else {
             mWakeLock.acquire();
         }
+        ActivityCompat.invalidateOptionsMenu(this);
     }
 
     private void doToggleWifiLock() {
@@ -629,6 +864,43 @@ public class Term extends Activity implements UpdateCallback {
             mWifiLock.release();
         } else {
             mWifiLock.acquire();
+        }
+        ActivityCompat.invalidateOptionsMenu(this);
+    }
+
+    private void doToggleActionBar() {
+        ActionBarCompat bar = mActionBar;
+        if (bar == null) {
+            return;
+        }
+        if (bar.isShowing()) {
+            bar.hide();
+        } else {
+            bar.show();
+        }
+    }
+
+    private void doUIToggle(int x, int y, int width, int height) {
+        switch (mActionBarMode) {
+        case TermSettings.ACTION_BAR_MODE_NONE:
+            if (AndroidCompat.SDK >= 11 && (mHaveFullHwKeyboard || y < height / 2)) {
+                openOptionsMenu();
+            } else {
+                doToggleSoftKeyboard();
+            }
+            break;
+        case TermSettings.ACTION_BAR_MODE_ALWAYS_VISIBLE:
+            if (!mHaveFullHwKeyboard) {
+                doToggleSoftKeyboard();
+            }
+            break;
+        case TermSettings.ACTION_BAR_MODE_HIDES:
+            if (mHaveFullHwKeyboard || y < height / 2) {
+                doToggleActionBar();
+            } else {
+                doToggleSoftKeyboard();
+            }
+            break;
         }
     }
 }

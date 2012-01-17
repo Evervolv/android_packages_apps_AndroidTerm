@@ -22,17 +22,13 @@ import android.os.IBinder;
 import android.content.Intent;
 import android.util.Log;
 import android.app.Notification;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
-import evervolv.androidterm.R;
 
-import evervolv.androidterm.model.SessionFinishCallback;
-import evervolv.androidterm.model.UpdateCallback;
+import evervolv.androidterm.compat.ServiceForegroundCompat;
 import evervolv.androidterm.session.TermSession;
-import evervolv.androidterm.util.ServiceForegroundCompat;
 import evervolv.androidterm.util.SessionList;
 
-public class TermService extends Service implements SessionFinishCallback
+public class TermService extends Service implements TermSession.FinishCallback
 {
     /* Parallels the value of START_STICKY on API Level >= 5 */
     private static final int COMPAT_START_STICKY = 1;
@@ -78,7 +74,7 @@ public class TermService extends Service implements SessionFinishCallback
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notifyIntent, 0);
         notification.setLatestEventInfo(this, getText(R.string.application_terminal), getText(R.string.service_notify_text), pendingIntent);
         compat.startForeground(RUNNING_NOTIFICATION, notification);
-        
+
         Log.d(TermDebug.LOG_TAG, "TermService started");
         return;
     }

@@ -16,7 +16,6 @@
 
 package evervolv.androidterm;
 
-import evervolv.androidterm.R;
 import java.io.FileDescriptor;
 
 /**

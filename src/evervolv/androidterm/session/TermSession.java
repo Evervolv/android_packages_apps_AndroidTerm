@@ -34,7 +34,6 @@ import android.util.Log;
 
 import evervolv.androidterm.Exec;
 import evervolv.androidterm.TermDebug;
-import evervolv.androidterm.model.SessionFinishCallback;
 import evervolv.androidterm.model.UpdateCallback;
 import evervolv.androidterm.util.ByteQueue;
 import evervolv.androidterm.util.TermSettings;
@@ -47,7 +46,6 @@ import evervolv.androidterm.util.TermSettings;
 public class TermSession {
     private TermSettings mSettings;
     private UpdateCallback mNotify;
-    private SessionFinishCallback mFinishCallback;
 
     private int mProcId;
     private FileDescriptor mTermFd;
@@ -76,6 +74,14 @@ public class TermSession {
     private static final int NEW_INPUT = 1;
     private static final int PROCESS_EXITED = 2;
 
+    /**
+     * Callback to be invoked when a TermSession finishes.
+     */
+    public interface FinishCallback {
+        void onSessionFinish(TermSession session);
+    }
+    private FinishCallback mFinishCallback;
+
     private boolean mIsRunning = false;
     private Handler mMsgHandler = new Handler() {
         @Override
@@ -91,7 +97,7 @@ public class TermSession {
         }
     };
 
-    public TermSession(TermSettings settings, SessionFinishCallback finishCallback, String initialCommand) {
+    public TermSession(TermSettings settings, FinishCallback finishCallback, String initialCommand) {
         mSettings = settings;
         mFinishCallback = finishCallback;
 
