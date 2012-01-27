@@ -32,6 +32,7 @@ import android.graphics.Rect;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.preference.PreferenceManager;
@@ -223,6 +224,8 @@ public class Term extends Activity implements UpdateCallback {
         }
     };
 
+    private Handler mHandler = new Handler();
+
     @Override
     public void onCreate(Bundle icicle) {
         super.onCreate(icicle);
@@ -385,6 +388,7 @@ public class Term extends Activity implements UpdateCallback {
         DisplayMetrics metrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(metrics);
 
+        mViewFlipper.updatePrefs(mSettings);
         for (View v : mViewFlipper) {
             ((EmulatorView) v).setDensity(metrics);
             ((EmulatorView) v).updatePrefs(mSettings);
@@ -565,9 +569,15 @@ public class Term extends Activity implements UpdateCallback {
         final AlertDialog.Builder b = new AlertDialog.Builder(this);
         b.setIcon(android.R.drawable.ic_dialog_alert);
         b.setMessage(R.string.confirm_window_close_message);
+        final Runnable closeWindow = new Runnable() {
+            public void run() {
+                doCloseWindow();
+            }
+        };
         b.setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
            public void onClick(DialogInterface dialog, int id) {
-               doCloseWindow();
+               dialog.dismiss();
+               mHandler.post(closeWindow);
            }
         });
         b.setNegativeButton(android.R.string.no, null);

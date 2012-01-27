@@ -35,9 +35,11 @@ import android.text.ClipboardManager;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.GestureDetector;
+import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup.LayoutParams;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
 import android.view.inputmethod.EditorInfo;
@@ -46,6 +48,7 @@ import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 
 import evervolv.androidterm.compat.AndroidCompat;
+import evervolv.androidterm.compat.KeyCharacterMapCompat;
 import evervolv.androidterm.model.TextRenderer;
 import evervolv.androidterm.model.UpdateCallback;
 import evervolv.androidterm.session.TerminalEmulator;
@@ -104,7 +107,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     /**
      * Text size. Zero means 4 x 8 font.
      */
-    private int mTextSize;
+    private int mTextSize = 10;
 
     private int mCursorStyle;
     private int mCursorBlink;
@@ -112,13 +115,13 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     /**
      * Foreground color.
      */
-    private int mForeground;
+    private int mForeground = TermSettings.WHITE;
     private int mForegroundIndex;
 
     /**
      * Background color.
      */
-    private int mBackground;
+    private int mBackground = TermSettings.BLACK;
     private int mBackgroundIndex;
 
     /**
@@ -211,6 +214,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             invalidate();
         }
     };
+
+    private boolean mRedoLayout = false;
 
     private GestureDetector mGestureDetector;
     private GestureDetector.OnGestureListener mExtGestureListener;
@@ -616,10 +621,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         setFocusable(true);
         setFocusableInTouchMode(true);
 
-        initialize(session);
-        session.setUpdateCallback(mUpdateNotify);
+        mTermSession = session;
         // XXX We should really be able to fetch this from within TermSession
         session.setProcessExitMessage(context.getString(R.string.process_exit_message));
+
+        mKeyListener = new TermKeyListener(session);
     }
 
     public void setWindowSizeCallback(WindowSizeCallback callback) {
@@ -647,19 +653,15 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     /**
      * Call this to initialize the view.
-     *
-     * @param session The terminal session this view will be displaying
      */
-    private void initialize(TermSession session) {
-        mTermSession = session;
+    private void initialize() {
+        TermSession session = mTermSession;
+
+        updateText();
+
         mTranscriptScreen = session.getTranscriptScreen();
         mEmulator = session.getEmulator();
-
-        mKeyListener = new TermKeyListener(session);
-        mTextSize = 10;
-        mForeground = TermSettings.WHITE;
-        mBackground = TermSettings.BLACK;
-        updateText();
+        session.setUpdateCallback(mUpdateNotify);
 
         requestFocus();
     }
@@ -898,7 +900,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             }
         }
 
-        mKeyListener.keyUp(keyCode);
+        mKeyListener.keyUp(keyCode, event);
         clearSpecialKeyStatus();
         return true;
     }
@@ -963,8 +965,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         if (!mKnownSize) {
             mKnownSize = true;
+            initialize();
+        } else {
+            updateSize(false);
         }
-        updateSize(false);
     }
 
     private void updateSize(int w, int h) {
@@ -985,11 +989,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     public void updateSize(boolean force) {
         if (mKnownSize) {
             getWindowVisibleDisplayFrame(mVisibleRect);
-            // Work around bug in getWindowVisibleDisplayFrame
-            if (AndroidCompat.SDK < 10) {
-                if (!mSettings.showStatusBar()) {
-                    mVisibleRect.top = 0;
-                }
+            /* Work around bug in getWindowVisibleDisplayFrame, and avoid
+               distracting visual glitch otherwise */
+            if (!mSettings.showStatusBar()) {
+                mVisibleRect.top = 0;
             }
             if (mSizeCallback != null) {
                 // Let activity adjust our size
@@ -1001,6 +1004,13 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             if (force || w != mVisibleWidth || h != mVisibleHeight) {
                 mVisibleWidth = w;
                 mVisibleHeight = h;
+
+                LayoutParams params = getLayoutParams();
+                params.width = w;
+                params.height = h;
+                setLayoutParams(params);
+                mRedoLayout = true;
+
                 updateSize(mVisibleWidth, mVisibleHeight);
             }
         }
@@ -1021,6 +1031,16 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     @Override
     protected void onDraw(Canvas canvas) {
         updateSize(false);
+        if (mRedoLayout) {
+            requestLayout();
+            mRedoLayout = false;
+        }
+
+        if (mEmulator == null) {
+            // Not ready yet
+            return;
+        }
+
         int w = getWidth();
         int h = getHeight();
 
@@ -1763,6 +1783,12 @@ class TermKeyListener {
 
     private static final int LAST_KEYCODE           = KEYCODE_PROG_BLUE;
 
+    private static final int META_ALT_ON = 2;
+    private static final int META_CAPS_LOCK_ON = 0x00100000;
+    private static final int META_CTRL_ON = 0x1000;
+    private static final int META_SHIFT_ON = 1;
+    private static final int META_CTRL_MASK = 0x7000;
+
     private String[] mKeyCodes = new String[256];
     private String[] mAppKeyCodes = new String[256];
 
@@ -1931,8 +1957,6 @@ class TermKeyListener {
 
     private ModifierKey mFnKey = new ModifierKey();
 
-    private boolean mCapsLock;
-
     private TermSession mTermSession;
 
     private int mBackKeyCode;
@@ -1970,8 +1994,12 @@ class TermKeyListener {
     }
 
     public int mapControlChar(int ch) {
+        return mapControlChar(mControlKey.isActive(), mFnKey.isActive(), ch);
+    }
+
+    public int mapControlChar(boolean control, boolean fn, int ch) {
         int result = ch;
-        if (mControlKey.isActive()) {
+        if (control) {
             // Search is the control key.
             if (result >= 'a' && result <= 'z') {
                 result = (char) (result - 'a' + '\001');
@@ -1996,7 +2024,7 @@ class TermKeyListener {
             } else if (result == '0') {
                 result = KEYCODE_OFFSET + TermKeyListener.KEYCODE_F12;
             }
-        } else if (mFnKey.isActive()) {
+        } else if (fn) {
             if (result == 'w' || result == 'W') {
                 result = KEYCODE_OFFSET + KeyEvent.KEYCODE_DPAD_UP;
             } else if (result == 'a' || result == 'A') {
@@ -2056,47 +2084,74 @@ class TermKeyListener {
             return;
         }
         int result = -1;
+        boolean allowToggle = isEventFromToggleDevice(event);
+        boolean chordedCtrl = false;
         switch (keyCode) {
         case KeyEvent.KEYCODE_ALT_RIGHT:
         case KeyEvent.KEYCODE_ALT_LEFT:
-            mAltKey.onPress();
+            if (allowToggle) {
+                mAltKey.onPress();
+            }
             break;
 
         case KeyEvent.KEYCODE_SHIFT_LEFT:
         case KeyEvent.KEYCODE_SHIFT_RIGHT:
-            mCapKey.onPress();
+            if (allowToggle) {
+                mCapKey.onPress();
+            }
             break;
 
         case KEYCODE_CTRL_LEFT:
         case KEYCODE_CTRL_RIGHT:
-            mControlKey.onPress();
-            break;
+            // Ignore the control key.
+            return;
 
         case KEYCODE_CAPS_LOCK:
-            if (event.getRepeatCount() == 0) {
-                mCapsLock = !mCapsLock;
-            }
-            break;
+            // Ignore the capslock key.
+            return;
 
         case KeyEvent.KEYCODE_BACK:
             result = mBackKeyCode;
             break;
 
         default: {
-            result = event.getUnicodeChar(
-                   (mCapKey.isActive() || mCapsLock ? KeyEvent.META_SHIFT_ON : 0) |
-                   (mAltKey.isActive() ? KeyEvent.META_ALT_ON : 0));
+            int metaState = event.getMetaState();
+            chordedCtrl = ((META_CTRL_ON & metaState) != 0);
+            boolean effectiveCaps = allowToggle &&
+                    (mCapKey.isActive());
+            boolean effectiveAlt = allowToggle && mAltKey.isActive();
+            int effectiveMetaState = metaState & (~META_CTRL_MASK);
+            if (effectiveCaps) {
+                effectiveMetaState |= KeyEvent.META_SHIFT_ON;
+            }
+            if (effectiveAlt) {
+                effectiveMetaState |= KeyEvent.META_ALT_ON;
+            }
+            result = event.getUnicodeChar(effectiveMetaState);
             break;
             }
         }
 
-        result = mapControlChar(result);
+        boolean effectiveControl = chordedCtrl || (allowToggle && mControlKey.isActive());
+        boolean effectiveFn = allowToggle && mFnKey.isActive();
+
+        result = mapControlChar(effectiveControl, effectiveFn, result);
 
         if (result >= KEYCODE_OFFSET) {
             handleKeyCode(result - KEYCODE_OFFSET, appMode);
         } else if (result >= 0) {
             mTermSession.write(result);
         }
+    }
+
+    private boolean isEventFromToggleDevice(KeyEvent event) {
+        if (AndroidCompat.SDK < 11) {
+            return true;
+        }
+        KeyCharacterMapCompat kcm = KeyCharacterMapCompat.wrap(
+                KeyCharacterMap.load(event.getDeviceId()));
+        return kcm.getModifierBehaviour() ==
+                KeyCharacterMapCompat.MODIFIER_BEHAVIOR_CHORDED_OR_TOGGLED;
     }
 
     public boolean handleKeyCode(int keyCode, boolean appMode) throws IOException {
@@ -2121,20 +2176,25 @@ class TermKeyListener {
      *
      * @param keyCode the keyCode of the keyUp event
      */
-    public void keyUp(int keyCode) {
+    public void keyUp(int keyCode, KeyEvent event) {
+        boolean allowToggle = isEventFromToggleDevice(event);
         switch (keyCode) {
         case KeyEvent.KEYCODE_ALT_LEFT:
         case KeyEvent.KEYCODE_ALT_RIGHT:
-            mAltKey.onRelease();
+            if (allowToggle) {
+                mAltKey.onRelease();
+            }
             break;
         case KeyEvent.KEYCODE_SHIFT_LEFT:
         case KeyEvent.KEYCODE_SHIFT_RIGHT:
-            mCapKey.onRelease();
+            if (allowToggle) {
+                mCapKey.onRelease();
+            }
             break;
 
         case KEYCODE_CTRL_LEFT:
         case KEYCODE_CTRL_RIGHT:
-            mControlKey.onRelease();
+            // ignore control keys.
             break;
 
         default:
