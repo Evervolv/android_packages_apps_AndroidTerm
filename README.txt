@@ -1,3 +1,5 @@
+Latest upstream version merged into Evervolv: 1.0.42
+
 This is an Android Terminal emulator. It enables you to access your Android
 device's built-in command-line shell.
 
