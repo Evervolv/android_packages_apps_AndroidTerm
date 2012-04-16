@@ -234,6 +234,12 @@ public class TerminalEmulator {
     private boolean mAboutToAutoWrap;
 
     /**
+     * The width of the last emitted spacing character.  Used to place
+     * combining characters into the correct column.
+     */
+    private int mLastEmittedCharWidth = 0;
+
+    /**
      * True if we just auto-wrapped and no character has been emitted on this
      * line yet.  Used to ensure combining characters following a character
      * at the edge of the screen are stored in the proper place.
@@ -515,8 +521,21 @@ public class TerminalEmulator {
     }
 
     private void process(byte b) {
+        process(b, true);
+    }
+
+    private void process(byte b, boolean doUTF8) {
         // Let the UTF-8 decoder try to handle it if we're in UTF-8 mode
-        if (mUTF8Mode && handleUTF8Sequence(b)) {
+        if (doUTF8 && mUTF8Mode && handleUTF8Sequence(b)) {
+            return;
+        }
+
+        // Handle C1 control characters
+        if ((b & 0x80) == 0x80 && (b & 0x7f) <= 0x1f) {
+            /* ESC ((code & 0x7f) + 0x40) is the two-byte escape sequence
+               corresponding to a particular C1 code */
+            startEscapeSequence(ESC);
+            process((byte) ((b & 0x7f) + 0x40), false);
             return;
         }
 
@@ -568,10 +587,6 @@ public class TerminalEmulator {
         case 27: // ESC
             // Always starts an escape sequence
             startEscapeSequence(ESC);
-            break;
-
-        case (byte) 0x9b: // CSI
-            startEscapeSequence(ESC_LEFT_SQUARE_BRACKET);
             break;
 
         default:
@@ -649,7 +664,15 @@ public class TerminalEmulator {
                 decoder.reset();
                 decoder.decode(byteBuf, charBuf, true);
                 decoder.flush(charBuf);
-                emit(charBuf.array());
+
+                char[] chars = charBuf.array();
+                if (chars[0] >= 0x80 && chars[0] <= 0x9f) {
+                    /* Sequence decoded to a C1 control character which needs
+                       to be sent through process() again */
+                    process((byte) chars[0], false);
+                } else {
+                    emit(chars);
+                }
 
                 byteBuf.clear();
                 charBuf.clear();
@@ -1413,9 +1436,9 @@ public class TerminalEmulator {
         if (width == 0) {
             // Combining character -- store along with character it modifies
             if (mJustWrapped) {
-                mScreen.set(mColumns - 1, mCursorRow - 1, c, foreColor, backColor);
+                mScreen.set(mColumns - mLastEmittedCharWidth, mCursorRow - 1, c, foreColor, backColor);
             } else {
-                mScreen.set(mCursorCol - 1, mCursorRow, c, foreColor, backColor);
+                mScreen.set(mCursorCol - mLastEmittedCharWidth, mCursorRow, c, foreColor, backColor);
             }
         } else {
             mScreen.set(mCursorCol, mCursorRow, c, foreColor, backColor);
@@ -1427,6 +1450,9 @@ public class TerminalEmulator {
         }
 
         mCursorCol = Math.min(mCursorCol + width, mColumns - 1);
+        if (width > 0) {
+            mLastEmittedCharWidth = width;
+        }
     }
 
     private void emit(int c) {

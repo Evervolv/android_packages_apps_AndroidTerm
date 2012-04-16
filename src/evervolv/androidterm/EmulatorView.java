@@ -33,13 +33,13 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.text.ClipboardManager;
 import android.util.DisplayMetrics;
+import android.util.FloatMath;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewGroup.LayoutParams;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
 import android.view.inputmethod.EditorInfo;
@@ -75,7 +75,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     private int mVisibleWidth;
     private int mVisibleHeight;
-    private Rect mVisibleRect = new Rect();
 
     private TermSession mTermSession;
 
@@ -163,8 +162,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     private static final int CURSOR_BLINK_PERIOD = 1000;
 
-    private static final int SCREEN_CHECK_PERIOD = 1000;
-
     private boolean mCursorVisible = true;
 
     private boolean mIsSelectingText = false;
@@ -186,22 +183,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     private boolean mIsActive = false;
 
-    /**
-     * True if we must poll to discover if the view has changed size.
-     * This is the only known way to detect the view changing size due to
-     * the IME being shown or hidden in API level <= 7.
-     */
-    private boolean mbPollForWindowSizeChange = AndroidCompat.SDK <= 7;
-
-    private Runnable mCheckSize = mbPollForWindowSizeChange
-        ? new Runnable() {
-            public void run() {
-                updateSize(false);
-                mHandler.postDelayed(this, SCREEN_CHECK_PERIOD);
-            }
-        }
-        : null;
-
     private Runnable mBlinkCursor = new Runnable() {
         public void run() {
             if (mCursorBlink != 0) {
@@ -215,20 +196,12 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         }
     };
 
-    private boolean mRedoLayout = false;
-
     private GestureDetector mGestureDetector;
     private GestureDetector.OnGestureListener mExtGestureListener;
     private float mScrollRemainder;
     private TermKeyListener mKeyListener;
-    private WindowSizeCallback mSizeCallback;
 
     private String mImeBuffer = "";
-
-    // Used by activity to inform us how much of the window belongs to us
-    public interface WindowSizeCallback {
-        public abstract void onGetSize(Rect rect);
-    }
 
     /**
      * Our message handler class. Implements a periodic callback.
@@ -266,18 +239,12 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     public void onResume() {
         mIsActive = true;
         updateSize(false);
-        if (mbPollForWindowSizeChange) {
-            mHandler.postDelayed(mCheckSize, SCREEN_CHECK_PERIOD);
-        }
         if (mCursorBlink != 0) {
             mHandler.postDelayed(mBlinkCursor, CURSOR_BLINK_PERIOD);
         }
     }
 
     public void onPause() {
-        if (mbPollForWindowSizeChange) {
-            mHandler.removeCallbacks(mCheckSize);
-        }
         if (mCursorBlink != 0) {
             mHandler.removeCallbacks(mBlinkCursor);
         }
@@ -493,6 +460,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             }
 
             private void clearComposingText() {
+                int len = mImeBuffer.length();
+                if (mComposingTextStart > len || mComposingTextEnd > len) {
+                    mComposingTextEnd = mComposingTextStart = 0;
+                    return;
+                }
                 setImeBuffer(mImeBuffer.substring(0, mComposingTextStart) +
                     mImeBuffer.substring(mComposingTextEnd));
                 if (mCursor < mComposingTextStart) {
@@ -551,6 +523,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 if (TermDebug.LOG_IME) {
                     Log.w(TAG, "setComposingText(\"" + text + "\", " + newCursorPosition + ")");
                 }
+                int len = mImeBuffer.length();
+                if (mComposingTextStart > len || mComposingTextEnd > len) {
+                    return false;
+                }
                 setImeBuffer(mImeBuffer.substring(0, mComposingTextStart) +
                     text + mImeBuffer.substring(mComposingTextEnd));
                 mComposingTextEnd = mComposingTextStart + text.length();
@@ -591,6 +567,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 if (TermDebug.LOG_IME) {
                     Log.w(TAG, "getSelectedText " + flags);
                 }
+                int len = mImeBuffer.length();
+                if (mSelectedTextEnd >= len || mSelectedTextStart > mSelectedTextEnd) {
+                    return "";
+                }
                 return mImeBuffer.substring(mSelectedTextStart, mSelectedTextEnd+1);
             }
 
@@ -626,10 +606,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         session.setProcessExitMessage(context.getString(R.string.process_exit_message));
 
         mKeyListener = new TermKeyListener(session);
-    }
-
-    public void setWindowSizeCallback(WindowSizeCallback callback) {
-        mSizeCallback = callback;
     }
 
     public void setExtGestureListener(GestureDetector.OnGestureListener listener) {
@@ -988,53 +964,20 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     public void updateSize(boolean force) {
         if (mKnownSize) {
-            getWindowVisibleDisplayFrame(mVisibleRect);
-            /* Work around bug in getWindowVisibleDisplayFrame, and avoid
-               distracting visual glitch otherwise */
-            if (!mSettings.showStatusBar()) {
-                mVisibleRect.top = 0;
-            }
-            if (mSizeCallback != null) {
-                // Let activity adjust our size
-                mSizeCallback.onGetSize(mVisibleRect);
-            }
-            int w = mVisibleRect.width();
-            int h = mVisibleRect.height();
+            int w = getWidth();
+            int h = getHeight();
             // Log.w("Term", "(" + w + ", " + h + ")");
             if (force || w != mVisibleWidth || h != mVisibleHeight) {
                 mVisibleWidth = w;
                 mVisibleHeight = h;
-
-                LayoutParams params = getLayoutParams();
-                params.width = w;
-                params.height = h;
-                setLayoutParams(params);
-                mRedoLayout = true;
-
                 updateSize(mVisibleWidth, mVisibleHeight);
             }
-        }
-    }
-
-    /**
-     * Called when the view changes size.
-     * (Note: Not always called on Android 1.5 or Android 1.6)
-     */
-    @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        if (mIsActive) {
-            updateSize(false);
         }
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         updateSize(false);
-        if (mRedoLayout) {
-            requestLayout();
-            mRedoLayout = false;
-        }
 
         if (mEmulator == null) {
             // Not ready yet
@@ -1167,8 +1110,9 @@ class Bitmap4x8FontRenderer extends BaseTextRenderer {
             int forePaintIndex, int forePaintColor,
             int backPaintIndex, int backPaintColor) {
         super(forePaintIndex, forePaintColor, backPaintIndex, backPaintColor);
-        mFont = BitmapFactory.decodeResource(resources,
-                R.drawable.atari_small);
+        int fontResource = AndroidCompat.SDK <= 3 ? R.drawable.atari_small
+                : R.drawable.atari_small_nodpi;
+        mFont = BitmapFactory.decodeResource(resources,fontResource);
         mPaint = new Paint();
         mPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
     }
@@ -1247,8 +1191,8 @@ class PaintRenderer extends BaseTextRenderer {
         mTextPaint.setAntiAlias(true);
         mTextPaint.setTextSize(fontSize);
 
-        mCharHeight = (int) Math.ceil(mTextPaint.getFontSpacing());
-        mCharAscent = (int) Math.ceil(mTextPaint.ascent());
+        mCharHeight = (int) FloatMath.ceil(mTextPaint.getFontSpacing());
+        mCharAscent = (int) FloatMath.ceil(mTextPaint.ascent());
         mCharDescent = mCharHeight + mCharAscent;
         mCharWidth = mTextPaint.measureText(EXAMPLE_CHAR, 0, 1);
     }

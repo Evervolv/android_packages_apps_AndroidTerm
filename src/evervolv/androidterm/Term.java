@@ -28,7 +28,6 @@ import android.content.SharedPreferences;
 import android.content.ServiceConnection;
 import android.content.res.Configuration;
 import android.content.res.Resources;
-import android.graphics.Rect;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
@@ -52,7 +51,6 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -203,14 +201,6 @@ public class Term extends Activity implements UpdateCallback {
         }
     }
 
-    private EmulatorView.WindowSizeCallback mSizeCallback = new EmulatorView.WindowSizeCallback() {
-        public void onGetSize(Rect rect) {
-            if (mActionBarMode == TermSettings.ACTION_BAR_MODE_ALWAYS_VISIBLE) {
-                // Fixed action bar takes space away from the EmulatorView
-                rect.top += mActionBar.getHeight();
-            }
-        }
-    };
     private View.OnKeyListener mBackKeyListener = new View.OnKeyListener() {
         public boolean onKey(View v, int keyCode, KeyEvent event) {
             if (keyCode == KeyEvent.KEYCODE_BACK && mActionBarMode == TermSettings.ACTION_BAR_MODE_HIDES && mActionBar.isShowing()) {
@@ -340,19 +330,7 @@ public class Term extends Activity implements UpdateCallback {
     }
 
     private TermSession createTermSession() {
-        /* Check whether we've received an initial command from the
-         * launching application
-         */
         String initialCommand = mSettings.getInitialCommand();
-        String iInitialCommand = getIntent().getStringExtra("evervolv.androidterm.iInitialCommand");
-        if (iInitialCommand != null) {
-            if (initialCommand != null) {
-                initialCommand += "\r" + iInitialCommand;
-            } else {
-                initialCommand = iInitialCommand;
-            }
-        }
-
         return new TermSession(mSettings, mTermService, initialCommand);
     }
 
@@ -361,15 +339,7 @@ public class Term extends Activity implements UpdateCallback {
         getWindowManager().getDefaultDisplay().getMetrics(metrics);
         EmulatorView emulatorView = new EmulatorView(this, session, metrics);
 
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.LEFT
-        );
-        emulatorView.setLayoutParams(params);
-
         emulatorView.setExtGestureListener(new EmulatorViewGestureListener(emulatorView));
-        emulatorView.setWindowSizeCallback(mSizeCallback);
         emulatorView.setOnKeyListener(mBackKeyListener);
         registerForContextMenu(emulatorView);
 
@@ -447,16 +417,15 @@ public class Term extends Activity implements UpdateCallback {
         if (onResumeSelectWindow >= 0) {
             mViewFlipper.setDisplayedChild(onResumeSelectWindow);
             onResumeSelectWindow = -1;
-        } else {
-            mViewFlipper.resumeCurrentView();
         }
+        mViewFlipper.onResume();
     }
 
     @Override
     public void onPause() {
         super.onPause();
 
-        mViewFlipper.pauseCurrentView();
+        mViewFlipper.onPause();
         if (mTermSessions != null) {
             mTermSessions.removeCallback(this);
             if (mWinListAdapter != null) {
@@ -498,7 +467,7 @@ public class Term extends Activity implements UpdateCallback {
 
         EmulatorView v = (EmulatorView) mViewFlipper.getCurrentView();
         if (v != null) {
-            v.updateSize(true);
+            v.updateSize(false);
         }
 
         if (mWinListAdapter != null) {
@@ -625,6 +594,21 @@ public class Term extends Activity implements UpdateCallback {
                 }
             }
             break;
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        if (intent.getBooleanExtra(RemoteInterface.EXTRA_REMOTE_OPEN_WINDOW, false)) {
+            // New session was created, add an EmulatorView to match
+            SessionList sessions = mTermSessions;
+            int position = sessions.size() - 1;
+
+            TermSession session = sessions.get(position);
+            EmulatorView view = createEmulatorView(session);
+
+            mViewFlipper.addView(view);
+            onResumeSelectWindow = position;
         }
     }
 
