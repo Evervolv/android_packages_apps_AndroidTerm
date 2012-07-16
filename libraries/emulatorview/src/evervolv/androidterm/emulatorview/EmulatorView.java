@@ -20,14 +20,8 @@ import java.io.IOException;
 
 import android.content.Context;
 import android.content.res.Resources;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
-import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
-import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
@@ -107,7 +101,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     private TextRenderer mTextRenderer;
 
     /**
-     * Text size. Zero means 4 x 8 font.
+     * Text size.
      */
     private int mTextSize = 10;
 
@@ -1040,12 +1034,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     private void updateText() {
         ColorScheme scheme = mColorScheme;
-        if (mTextSize > 0) {
-            mTextRenderer = new PaintRenderer(mTextSize, scheme);
-        }
-        else {
-            mTextRenderer = new Bitmap4x8FontRenderer(getResources(), scheme);
-        }
+        mTextRenderer = new PaintRenderer(mTextSize, scheme);
         mBackgroundPaint.setColor(scheme.getBackColor());
         mCharacterWidth = mTextRenderer.getCharacterWidth();
         mCharacterHeight = mTextRenderer.getCharacterHeight();
@@ -1281,89 +1270,6 @@ abstract class BaseTextRenderer implements TextRenderer {
             int backPaintIndex, int backPaintColor) {
         mForePaint[forePaintIndex] = forePaintColor;
         mBackPaint[backPaintIndex] = backPaintColor;
-    }
-}
-
-class Bitmap4x8FontRenderer extends BaseTextRenderer {
-    private final static int kCharacterWidth = 4;
-    private final static int kCharacterHeight = 8;
-    private Bitmap mFont;
-    private int mCurrentForeColor;
-    private int mCurrentBackColor;
-    private float[] mColorMatrix;
-    private Paint mPaint;
-    private static final float BYTE_SCALE = 1.0f / 255.0f;
-
-    public Bitmap4x8FontRenderer(Resources resources, ColorScheme scheme) {
-        super(scheme);
-        int fontResource = AndroidCompat.SDK <= 3 ? R.drawable.atari_small
-                : R.drawable.atari_small_nodpi;
-        mFont = BitmapFactory.decodeResource(resources,fontResource);
-        mPaint = new Paint();
-        mPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
-    }
-
-    public float getCharacterWidth() {
-        return kCharacterWidth;
-    }
-
-    public int getCharacterHeight() {
-        return kCharacterHeight;
-    }
-
-    public int getTopMargin() {
-        return 0;
-    }
-
-    public void drawTextRun(Canvas canvas, float x, float y,
-            int lineOffset, int runWidth, char[] text, int index, int count,
-            boolean cursor, int foreColor, int backColor) {
-        setColorMatrix(mForePaint[foreColor],
-                cursor ? mCursorPaint : mBackPaint[backColor & 7]);
-        int destX = (int) x + kCharacterWidth * lineOffset;
-        int destY = (int) y;
-        Rect srcRect = new Rect();
-        Rect destRect = new Rect();
-        destRect.top = (destY - kCharacterHeight);
-        destRect.bottom = destY;
-        for(int i = 0; i < count; i++) {
-            // XXX No Unicode support in bitmap font
-            char c = (char) (text[i + index] & 0xff);
-            if ((cursor || (c != 32)) && (c < 128)) {
-                int cellX = c & 31;
-                int cellY = (c >> 5) & 3;
-                int srcX = cellX * kCharacterWidth;
-                int srcY = cellY * kCharacterHeight;
-                srcRect.set(srcX, srcY,
-                        srcX + kCharacterWidth, srcY + kCharacterHeight);
-                destRect.left = destX;
-                destRect.right = destX + kCharacterWidth;
-                canvas.drawBitmap(mFont, srcRect, destRect, mPaint);
-            }
-            destX += kCharacterWidth;
-        }
-    }
-
-    private void setColorMatrix(int foreColor, int backColor) {
-        if ((foreColor != mCurrentForeColor)
-                || (backColor != mCurrentBackColor)
-                || (mColorMatrix == null)) {
-            mCurrentForeColor = foreColor;
-            mCurrentBackColor = backColor;
-            if (mColorMatrix == null) {
-                mColorMatrix = new float[20];
-                mColorMatrix[18] = 1.0f; // Just copy Alpha
-            }
-            for (int component = 0; component < 3; component++) {
-                int rightShift = (2 - component) << 3;
-                int fore = 0xff & (foreColor >> rightShift);
-                int back = 0xff & (backColor >> rightShift);
-                int delta = back - fore;
-                mColorMatrix[component * 6] = delta * BYTE_SCALE;
-                mColorMatrix[component * 5 + 4] = fore;
-            }
-            mPaint.setColorFilter(new ColorMatrixColorFilter(mColorMatrix));
-        }
     }
 }
 

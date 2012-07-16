@@ -65,7 +65,6 @@
     </string-array>
 
     <string-array name="entries_fontsize_preference">
-        <item>4 x 8 pixels</item>
         <item>6 pt</item>
         <item>7 pt</item>
         <item>8 pt</item>
@@ -79,7 +78,6 @@
 
     <!-- Do not localize entryvalues -->
     <string-array name="entryvalues_fontsize_preference">
-        <item>0</item>
         <item>6</item>
         <item>7</item>
         <item>8</item>
