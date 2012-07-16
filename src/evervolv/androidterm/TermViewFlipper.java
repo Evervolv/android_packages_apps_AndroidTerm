@@ -29,8 +29,10 @@ import android.view.View;
 import android.widget.Toast;
 import android.widget.ViewFlipper;
 
+import evervolv.androidterm.emulatorview.EmulatorView;
+import evervolv.androidterm.emulatorview.UpdateCallback;
+
 import evervolv.androidterm.compat.AndroidCompat;
-import evervolv.androidterm.model.UpdateCallback;
 import evervolv.androidterm.util.TermSettings;
 
 public class TermViewFlipper extends ViewFlipper implements Iterable<View> {
@@ -153,6 +155,7 @@ public class TermViewFlipper extends ViewFlipper implements Iterable<View> {
             return;
         }
         view.onResume();
+        view.requestFocus();
     }
 
     private void showTitle() {

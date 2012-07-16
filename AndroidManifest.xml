@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="evervolv.androidterm"
-      android:versionName="1.0.42" android:versionCode="43"
+      android:versionName="1.0.44"
+      android:versionCode="45"
       android:installLocation="auto">
     <uses-sdk android:minSdkVersion="3" android:targetSdkVersion="11" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -10,6 +11,16 @@
     <permission android:name="evervolv.androidterm.permission.RUN_SCRIPT"
                 android:label="@string/perm_run_script"
                 android:description="@string/permdesc_run_script"
+                android:permissionGroup="android.permission-group.SYSTEM_TOOLS"
+                android:protectionLevel="dangerous" />
+    <permission android:name="evervolv.androidterm.permission.APPEND_TO_PATH"
+                android:label="@string/perm_append_to_path"
+                android:description="@string/permdesc_append_to_path"
+                android:permissionGroup="android.permission-group.SYSTEM_TOOLS"
+                android:protectionLevel="dangerous" />
+    <permission android:name="evervolv.androidterm.permission.PREPEND_TO_PATH"
+                android:label="@string/perm_prepend_to_path"
+                android:description="@string/permdesc_prepend_to_path"
                 android:permissionGroup="android.permission-group.SYSTEM_TOOLS"
                 android:protectionLevel="dangerous" />
     <application android:icon="@drawable/app_terminal"
@@ -24,6 +35,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity-alias android:name="TermInternal"
+                android:targetActivity="Term"
+                android:exported="false">
+            <intent-filter>
+                <action android:name="evervolv.androidterm.private.OPEN_NEW_WINDOW" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="evervolv.androidterm.private.SWITCH_WINDOW" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
         <activity android:name="RemoteInterface"
                 android:excludeFromRecents="true">
             <intent-filter>

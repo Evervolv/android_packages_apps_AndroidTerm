@@ -1,0 +1,10 @@
+#!/bin/bash
+# command line build script for building the debug version
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ATE_ROOT="$( cd $DIR/.. && pwd )"
+
+cd "$ATE_ROOT"
+rm -rf bin obj
+cd jni
+$ANDROID_NDK_ROOT/ndk-build && cd .. && ant debug

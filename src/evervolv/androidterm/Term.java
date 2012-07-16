@@ -17,9 +17,13 @@
 package evervolv.androidterm;
 
 import java.io.UnsupportedEncodingException;
+import java.text.Collator;
+import java.util.Arrays;
+import java.util.Locale;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -54,12 +58,15 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import evervolv.androidterm.emulatorview.ColorScheme;
+import evervolv.androidterm.emulatorview.EmulatorView;
+import evervolv.androidterm.emulatorview.TermSession;
+import evervolv.androidterm.emulatorview.UpdateCallback;
+
 import evervolv.androidterm.compat.ActionBarCompat;
 import evervolv.androidterm.compat.ActivityCompat;
 import evervolv.androidterm.compat.AndroidCompat;
 import evervolv.androidterm.compat.MenuItemCompat;
-import evervolv.androidterm.model.UpdateCallback;
-import evervolv.androidterm.session.TermSession;
 import evervolv.androidterm.util.SessionList;
 import evervolv.androidterm.util.TermSettings;
 
@@ -93,6 +100,7 @@ public class Term extends Activity implements UpdateCallback {
     private boolean mStopServiceOnFinish = false;
 
     private Intent TSIntent;
+    private Intent mLastNewIntent;
 
     public static final int REQUEST_CHOOSE_WINDOW = 1;
     public static final String EXTRA_WINDOW_ID = "evervolv.androidterm.window_id";
@@ -105,14 +113,40 @@ public class Term extends Activity implements UpdateCallback {
 
     private boolean mBackKeyPressed;
 
+    private static final String ACTION_PATH_BROADCAST = "evervolv.androidterm.broadcast.APPEND_TO_PATH";
+    private static final String ACTION_PATH_PREPEND_BROADCAST = "evervolv.androidterm.broadcast.PREPEND_TO_PATH";
+    private static final String PERMISSION_PATH_BROADCAST = "evervolv.androidterm.permission.APPEND_TO_PATH";
+    private static final String PERMISSION_PATH_PREPEND_BROADCAST = "evervolv.androidterm.permission.PREPEND_TO_PATH";
+    private int mPendingPathBroadcasts = 0;
+    private BroadcastReceiver mPathReceiver = new BroadcastReceiver() {
+        public void onReceive(Context context, Intent intent) {
+            String path = makePathFromBundle(getResultExtras(false));
+            if (intent.getAction().equals(ACTION_PATH_PREPEND_BROADCAST)) {
+                mSettings.setPrependPath(path);
+            } else {
+                mSettings.setAppendPath(path);
+            }
+            mPendingPathBroadcasts--;
+
+            if (mPendingPathBroadcasts <= 0 && mTermService != null) {
+                populateViewFlipper();
+                populateWindowList();
+            }
+        }
+    };
+    // Available on API 12 and later
+    private static final int FLAG_INCLUDE_STOPPED_PACKAGES = 0x20;
+
     private TermService mTermService;
     private ServiceConnection mTSConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder service) {
             Log.i(TermDebug.LOG_TAG, "Bound to TermService");
             TermService.TSBinder binder = (TermService.TSBinder) service;
             mTermService = binder.getService();
-            populateViewFlipper();
-            populateWindowList();
+            if (mPendingPathBroadcasts <= 0) {
+                populateViewFlipper();
+                populateWindowList();
+            }
         }
 
         public void onServiceDisconnected(ComponentName arg0) {
@@ -223,6 +257,18 @@ public class Term extends Activity implements UpdateCallback {
         mPrefs = PreferenceManager.getDefaultSharedPreferences(this);
         mSettings = new TermSettings(getResources(), mPrefs);
 
+        Intent broadcast = new Intent(ACTION_PATH_BROADCAST);
+        if (AndroidCompat.SDK >= 12) {
+            broadcast.addFlags(FLAG_INCLUDE_STOPPED_PACKAGES);
+        }
+        mPendingPathBroadcasts++;
+        sendOrderedBroadcast(broadcast, PERMISSION_PATH_BROADCAST, mPathReceiver, null, RESULT_OK, null, null);
+
+        broadcast = new Intent(broadcast);
+        broadcast.setAction(ACTION_PATH_PREPEND_BROADCAST);
+        mPendingPathBroadcasts++;
+        sendOrderedBroadcast(broadcast, PERMISSION_PATH_PREPEND_BROADCAST, mPathReceiver, null, RESULT_OK, null, null);
+
         TSIntent = new Intent(this, TermService.class);
         startService(TSIntent);
 
@@ -260,12 +306,37 @@ public class Term extends Activity implements UpdateCallback {
             mActionBar = actionBar;
             actionBar.setNavigationMode(ActionBarCompat.NAVIGATION_MODE_LIST);
             actionBar.setDisplayOptions(0, ActionBarCompat.DISPLAY_SHOW_TITLE);
+            if (mActionBarMode == TermSettings.ACTION_BAR_MODE_HIDES) {
+                actionBar.hide();
+            }
         }
 
         mHaveFullHwKeyboard = checkHaveFullHwKeyboard(getResources().getConfiguration());
 
         updatePrefs();
         mAlreadyStarted = true;
+    }
+
+    private String makePathFromBundle(Bundle extras) {
+        if (extras == null || extras.size() == 0) {
+            return "";
+        }
+
+        String[] keys = new String[extras.size()];
+        keys = extras.keySet().toArray(keys);
+        Collator collator = Collator.getInstance(Locale.US);
+        Arrays.sort(keys, collator);
+
+        StringBuilder path = new StringBuilder();
+        for (String key : keys) {
+            String dir = extras.getString(key);
+            if (dir != null && !dir.equals("")) {
+                path.append(dir);
+                path.append(":");
+            }
+        }
+
+        return path.substring(0, path.length()-1);
     }
 
     private void populateViewFlipper() {
@@ -283,6 +354,22 @@ public class Term extends Activity implements UpdateCallback {
             }
 
             updatePrefs();
+
+            Intent intent = getIntent();
+            int flags = intent.getFlags();
+            String action = intent.getAction();
+            if ((flags & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0 &&
+                    action != null) {
+                if (action.equals(RemoteInterface.PRIVACT_OPEN_NEW_WINDOW)) {
+                    mViewFlipper.setDisplayedChild(mTermSessions.size()-1);
+                } else if (action.equals(RemoteInterface.PRIVACT_SWITCH_WINDOW)) {
+                    int target = intent.getIntExtra(RemoteInterface.PRIVEXTRA_TARGET_WINDOW, -1);
+                    if (target >= 0) {
+                        mViewFlipper.setDisplayedChild(target);
+                    }
+                }
+            }
+
             mViewFlipper.resumeCurrentView();
         }
     }
@@ -294,6 +381,7 @@ public class Term extends Activity implements UpdateCallback {
         }
 
         if (mTermSessions != null) {
+            int position = mViewFlipper.getDisplayedChild();
             if (mWinListAdapter == null) {
                 WindowListAdapter adapter = new WindowListActionBarAdapter(mTermSessions);
                 mWinListAdapter = adapter;
@@ -303,6 +391,7 @@ public class Term extends Activity implements UpdateCallback {
             } else {
                 mWinListAdapter.setSessions(mTermSessions);
             }
+            mActionBar.setSelectedNavigationItem(position);
         }
     }
 
@@ -329,15 +418,25 @@ public class Term extends Activity implements UpdateCallback {
         finish();
     }
 
-    private TermSession createTermSession() {
-        String initialCommand = mSettings.getInitialCommand();
-        return new TermSession(mSettings, mTermService, initialCommand);
+    protected static TermSession createTermSession(Context context, TermSettings settings, String initialCommand) {
+        ShellTermSession session = new ShellTermSession(settings, initialCommand);
+        // XXX We should really be able to fetch this from within TermSession
+        session.setProcessExitMessage(context.getString(R.string.process_exit_message));
+
+        return session;
     }
 
-    private EmulatorView createEmulatorView(TermSession session) {
+    private TermSession createTermSession() {
+        TermSettings settings = mSettings;
+        TermSession session = createTermSession(this, settings, settings.getInitialCommand());
+        session.setFinishCallback(mTermService);
+        return session;
+    }
+
+    private TermView createEmulatorView(TermSession session) {
         DisplayMetrics metrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        EmulatorView emulatorView = new EmulatorView(this, session, metrics);
+        TermView emulatorView = new TermView(this, session, metrics);
 
         emulatorView.setExtGestureListener(new EmulatorViewGestureListener(emulatorView));
         emulatorView.setOnKeyListener(mBackKeyListener);
@@ -357,17 +456,21 @@ public class Term extends Activity implements UpdateCallback {
     private void updatePrefs() {
         DisplayMetrics metrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(metrics);
+        ColorScheme colorScheme = new ColorScheme(mSettings.getColorScheme());
 
         mViewFlipper.updatePrefs(mSettings);
+
         for (View v : mViewFlipper) {
             ((EmulatorView) v).setDensity(metrics);
-            ((EmulatorView) v).updatePrefs(mSettings);
+            ((TermView) v).updatePrefs(mSettings);
         }
+
         if (mTermSessions != null) {
             for (TermSession session : mTermSessions) {
-                session.updatePrefs(mSettings);
+                ((ShellTermSession) session).updatePrefs(mSettings);
             }
         }
+
         {
             Window win = getWindow();
             WindowManager.LayoutParams params = win.getAttributes();
@@ -527,7 +630,7 @@ public class Term extends Activity implements UpdateCallback {
         TermSession session = createTermSession();
         mTermSessions.add(session);
 
-        EmulatorView view = createEmulatorView(session);
+        TermView view = createEmulatorView(session);
         view.updatePrefs(mSettings);
 
         mViewFlipper.addView(view);
@@ -585,6 +688,7 @@ public class Term extends Activity implements UpdateCallback {
                     onResumeSelectWindow = position;
                 } else if (position == -1) {
                     doCreateNewWindow();
+                    onResumeSelectWindow = mTermSessions.size() - 1;
                 }
             } else {
                 // Close the activity if user closed all sessions
@@ -599,7 +703,17 @@ public class Term extends Activity implements UpdateCallback {
 
     @Override
     protected void onNewIntent(Intent intent) {
-        if (intent.getBooleanExtra(RemoteInterface.EXTRA_REMOTE_OPEN_WINDOW, false)) {
+        if ((intent.getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) {
+            // Don't repeat action if intent comes from history
+            return;
+        }
+
+        String action = intent.getAction();
+        if (action == null) {
+            return;
+        }
+
+        if (action.equals(RemoteInterface.PRIVACT_OPEN_NEW_WINDOW)) {
             // New session was created, add an EmulatorView to match
             SessionList sessions = mTermSessions;
             int position = sessions.size() - 1;
@@ -609,6 +723,11 @@ public class Term extends Activity implements UpdateCallback {
 
             mViewFlipper.addView(view);
             onResumeSelectWindow = position;
+        } else if (action.equals(RemoteInterface.PRIVACT_SWITCH_WINDOW)) {
+            int target = intent.getIntExtra(RemoteInterface.PRIVEXTRA_TARGET_WINDOW, -1);
+            if (target >= 0) {
+                onResumeSelectWindow = target;
+            }
         }
     }
 
@@ -879,6 +998,7 @@ public class Term extends Activity implements UpdateCallback {
         case TermSettings.ACTION_BAR_MODE_NONE:
             if (AndroidCompat.SDK >= 11 && (mHaveFullHwKeyboard || y < height / 2)) {
                 openOptionsMenu();
+                return;
             } else {
                 doToggleSoftKeyboard();
             }
@@ -891,10 +1011,12 @@ public class Term extends Activity implements UpdateCallback {
         case TermSettings.ACTION_BAR_MODE_HIDES:
             if (mHaveFullHwKeyboard || y < height / 2) {
                 doToggleActionBar();
+                return;
             } else {
                 doToggleSoftKeyboard();
             }
             break;
         }
+        getCurrentEmulatorView().requestFocus();
     }
 }

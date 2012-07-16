@@ -24,8 +24,9 @@ import android.util.Log;
 import android.app.Notification;
 import android.app.PendingIntent;
 
+import evervolv.androidterm.emulatorview.TermSession;
+
 import evervolv.androidterm.compat.ServiceForegroundCompat;
-import evervolv.androidterm.session.TermSession;
 import evervolv.androidterm.util.SessionList;
 
 public class TermService extends Service implements TermSession.FinishCallback

@@ -20,8 +20,8 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Collection;
 
-import evervolv.androidterm.model.UpdateCallback;
-import evervolv.androidterm.session.TermSession;
+import evervolv.androidterm.emulatorview.TermSession;
+import evervolv.androidterm.emulatorview.UpdateCallback;
 
 /**
  * An ArrayList of TermSessions which allows users to register callbacks in

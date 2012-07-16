@@ -22,8 +22,9 @@ import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.TextView;
 
-import evervolv.androidterm.model.UpdateCallback;
-import evervolv.androidterm.session.TermSession;
+import evervolv.androidterm.emulatorview.TermSession;
+import evervolv.androidterm.emulatorview.UpdateCallback;
+
 import evervolv.androidterm.util.SessionList;
 
 public class WindowListAdapter extends BaseAdapter implements UpdateCallback {
