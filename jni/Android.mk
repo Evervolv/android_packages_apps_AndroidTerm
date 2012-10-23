@@ -23,12 +23,16 @@ include $(CLEAR_VARS)
 # This is the target being built.
 LOCAL_MODULE:= libjackpal-androidterm4
 
+LOCAL_MODULE_TAGS := optional
+
 # All of the source files that we will compile.
 LOCAL_SRC_FILES:= \
   common.cpp \
   termExec.cpp \
   fileCompat.cpp
 
-LOCAL_LDLIBS := -ldl -llog
+# LOCAL_LDLIBS doesn't work when building inside the JB source tree
+# LOCAL_LDLIBS := -ldl -llog
+LOCAL_SHARED_LIBRARIES += liblog libcutils
 
 include $(BUILD_SHARED_LIBRARY)

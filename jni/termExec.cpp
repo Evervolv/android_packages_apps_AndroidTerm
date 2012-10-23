@@ -50,7 +50,7 @@ static jclass class_fileDescriptor;
 static jfieldID field_fileDescriptor_descriptor;
 static jmethodID method_fileDescriptor_init;
 
-typedef unsigned short char16_t;
+#define char16_t uint16_t // WAS: typedef unsigned short char16_t; (changed because char16_t already exists in C++11)
 
 class String8 {
 public:

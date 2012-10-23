@@ -24,7 +24,7 @@ TOP_LOCAL_PATH:= $(call my-dir)
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES := $(call all-subdir-java-files)
+LOCAL_SRC_FILES := $(call all-java-files-under, src)
 
 LOCAL_PACKAGE_NAME := AndroidTerm
 
@@ -32,9 +32,17 @@ LOCAL_MODULE_TAGS := optional
 
 LOCAL_JNI_SHARED_LIBRARIES := libjackpal-androidterm4
 
+# Make sure the JNI library is installed
+LOCAL_REQUIRED_MODULES := libjackpal-androidterm4
+
+LOCAL_STATIC_JAVA_LIBRARIES := jackpal.androidterm.emulatorview
+
 include $(BUILD_PACKAGE)
 
 # ============================================================
 
 # Also build all of the sub-targets under this one: the shared library.
 include $(call all-makefiles-under,$(LOCAL_PATH))
+
+# And the one in a sub-subdirectory
+include $(TOP_LOCAL_PATH)/libraries/emulatorview/Android.mk

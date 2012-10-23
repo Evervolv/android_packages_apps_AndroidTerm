@@ -1,0 +1,4 @@
+Upstream: git://github.com/jackpal/Android-Terminal-Emulator.git
+
+Linaro modifications:
+- Make it build inside the Android (JB) source tree
