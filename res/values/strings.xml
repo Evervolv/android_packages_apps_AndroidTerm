@@ -58,7 +58,7 @@
    <string name="summary_actionbar_preference">Choose the action bar\'s behavior (Android 3.0 and up).</string>
    <string name="dialog_title_actionbar_preference">Action bar behavior</string>
 
-      <string name="title_orientation_preference">Screen orientation</string>
+   <string name="title_orientation_preference">Screen orientation</string>
    <string name="summary_orientation_preference">Choose the screen orientation behavior.</string>
    <string name="dialog_title_orientation_preference">Screen orientation behavior</string>
 
@@ -155,5 +155,8 @@
   <string name="alt_sends_esc">Alt key sends ESC</string>
   <string name="alt_sends_esc_summary_on">Alt key sends ESC.</string>
   <string name="alt_sends_esc_summary_off">Alt key does not send ESC.</string>
+
+  <string name="title_mouse_tracking_preference">Send mouse events</string>
+  <string name="summary_mouse_tracking_preference">Whether tap and scroll events should be sent as escape sequences to the terminal.</string>
 
 </resources>

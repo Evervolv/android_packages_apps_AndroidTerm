@@ -54,6 +54,8 @@ public class TermSettings {
 
     private boolean mAltSendsEsc;
 
+    private boolean mMouseTracking;
+
     private static final String STATUSBAR_KEY = "statusbar";
     private static final String ACTIONBAR_KEY = "actionbar";
     private static final String ORIENTATION_KEY = "orientation";
@@ -75,6 +77,7 @@ public class TermSettings {
     private static final String PATHPREPEND_KEY = "allow_prepend_path";
     private static final String HOMEPATH_KEY = "home_path";
     private static final String ALT_SENDS_ESC = "alt_sends_esc";
+    private static final String MOUSE_TRACKING = "mouse_tracking";
 
     public static final int WHITE               = 0xffffffff;
     public static final int BLACK               = 0xff000000;
@@ -87,6 +90,7 @@ public class TermSettings {
     public static final int SOLARIZED_BG        = 0xfffdf6e3;
     public static final int SOLARIZED_DARK_FG   = 0xff839496;
     public static final int SOLARIZED_DARK_BG   = 0xff002b36;
+    public static final int LINUX_CONSOLE_WHITE = 0xffaaaaaa;
 
     // foreground color, background color
     public static final int[][] COLOR_SCHEMES = {
@@ -98,7 +102,8 @@ public class TermSettings {
         {RED,               BLACK},
         {HOLO_BLUE,         BLACK},
         {SOLARIZED_FG,      SOLARIZED_BG},
-        {SOLARIZED_DARK_FG, SOLARIZED_DARK_BG}
+        {SOLARIZED_DARK_FG, SOLARIZED_DARK_BG},
+        {LINUX_CONSOLE_WHITE, BLACK}
     };
 
     public static final int ACTION_BAR_MODE_NONE = 0;
@@ -172,6 +177,7 @@ public class TermSettings {
         mAllowPathPrepend = res.getBoolean(R.bool.pref_allow_prepend_path_default);
         // the mHomePath default is set dynamically in readPrefs()
         mAltSendsEsc = res.getBoolean(R.bool.pref_alt_sends_esc_default);
+        mMouseTracking = res.getBoolean(R.bool.pref_mouse_tracking_default);
     }
 
     public void readPrefs(SharedPreferences prefs) {
@@ -199,6 +205,7 @@ public class TermSettings {
         mAllowPathPrepend = readBooleanPref(PATHPREPEND_KEY, mAllowPathPrepend);
         mHomePath = readStringPref(HOMEPATH_KEY, mHomePath);
         mAltSendsEsc = readBooleanPref(ALT_SENDS_ESC, mAltSendsEsc);
+        mMouseTracking = readBooleanPref(MOUSE_TRACKING, mMouseTracking);
         mPrefs = null;  // we leak a Context if we hold on to this
     }
 
@@ -264,6 +271,10 @@ public class TermSettings {
 
     public boolean getAltSendsEscFlag() {
         return mAltSendsEsc;
+    }
+
+    public boolean getMouseTrackingFlag() {
+        return mMouseTracking;
     }
 
     public int getBackKeyCharacter() {

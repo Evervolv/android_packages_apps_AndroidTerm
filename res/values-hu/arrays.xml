@@ -24,7 +24,13 @@
     <string-array name="entries_actionbar_preference">
         <!-- <item>Akciósáv letiltva</item> -->
         <item>Mindig jelenjen meg</item>
-        <item>Elrejtés (a megjelenítéshez érintse meg a képernyő tetejét vagy a menü gombot)</item>
+        <item>Elrejtés (a megjelenítéshez érintsd meg a képernyő tetejét vagy a menü gombot)</item>
+    </string-array>
+
+    <string-array name="entries_orientation_preference">
+        <item>Automatikus</item>
+        <item>Fekvő</item>
+        <item>Álló</item>
     </string-array>
 
     <string-array name="entries_cursorblink_preference">
@@ -70,8 +76,9 @@
         <item>Sárga szöveg, fekete háttér</item>
         <item>Piros szöveg, fekete háttér</item>
         <item>Holo kék szöveg, fekete háttér</item>
-        <item>Solarized Light</item>
-        <item>Solarized Dark</item>
+        <item>Solarized világos</item>
+        <item>Solarized sötét</item>
+        <item>Linux konzol</item>
     </string-array>
 
     <string-array name="entries_backaction_preference">
