@@ -18,16 +18,23 @@ package jackpal.androidterm.emulatorview;
 
 import jackpal.androidterm.emulatorview.compat.ClipboardManagerCompat;
 import jackpal.androidterm.emulatorview.compat.ClipboardManagerCompatFactory;
+import jackpal.androidterm.emulatorview.compat.KeycodeConstants;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Hashtable;
 
+import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
+import android.text.style.URLSpan;
+import android.text.util.Linkify;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -75,11 +82,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     private TermSession mTermSession;
 
     /**
-     * Our transcript. Contains the screen and the transcript.
-     */
-    private TranscriptScreen mTranscriptScreen;
-
-    /**
      * Total width of each character, in pixels
      */
     private float mCharacterWidth;
@@ -119,7 +121,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     private boolean mUseCookedIme;
 
     /**
-     * Our terminal emulator. We use this to get the current cursor position.
+     * Our terminal emulator.
      */
     private TerminalEmulator mEmulator;
 
@@ -222,6 +224,95 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
         }
     };
+
+    /**
+     *
+     * A hash table of underlying URLs to implement clickable links.
+     */
+    private Hashtable<Integer,URLSpan[]> mLinkLayer = new Hashtable<Integer,URLSpan[]>();
+
+    /**
+     * Convert any URLs in the current row into a URLSpan,
+     * and store that result in a hash table of URLSpan entries.
+     *
+     * @param row The number of the row to check for links
+     * @return The number of lines in a multi-line-wrap set of links
+     */
+    private int createLinks(int row)
+    {
+        TranscriptScreen transcriptScreen = mEmulator.getScreen();
+        char [] result = transcriptScreen.getScriptLine(row);
+        int lineCount = 1;
+
+        //Nothing to do if there's no text.
+        if(result == null)
+            return lineCount;
+
+        SpannableStringBuilder textToLinkify = new SpannableStringBuilder(new String(result));
+
+        boolean lineWrap = transcriptScreen.getScriptLineWrap(row);
+
+        //While the current line has a wrap
+        while (lineWrap)
+        {
+            //Get next line
+            result = transcriptScreen.getScriptLine(row + lineCount);
+
+            //If next line is blank, don't try and append
+            if(result == null)
+                break;
+
+            textToLinkify.append(new String(result));
+
+            //Check if line after next is wrapped
+            lineWrap = transcriptScreen.getScriptLineWrap(row + lineCount);
+            ++lineCount;
+        }
+
+        Linkify.addLinks(textToLinkify, Linkify.WEB_URLS);
+        URLSpan [] urls = textToLinkify.getSpans(0, textToLinkify.length(), URLSpan.class);
+        if(urls.length > 0)
+        {
+            //re-index row to 0 if it is negative
+            int screenRow = row - mTopRow;
+
+            //Create and initialize set of links
+            URLSpan [][] linkRows = new URLSpan[lineCount][];
+            for(int i=0; i<lineCount; ++i)
+            {
+                linkRows[i] = new URLSpan[mColumns];
+                Arrays.fill(linkRows[i], null);
+            }
+
+            //For each URL:
+            for(int urlNum=0; urlNum<urls.length; ++urlNum)
+            {
+                URLSpan url = urls[urlNum];
+                int spanStart = textToLinkify.getSpanStart(url);
+                int spanEnd = textToLinkify.getSpanEnd(url) - 1;
+
+                //Build accurate indices for multi-line links
+                int startRow = spanStart / mColumns;
+                int startCol = spanStart % mColumns;
+                int endRow   = spanEnd   / mColumns;
+                int endCol   = spanEnd   % mColumns;
+
+                //Fill linkRows with the URL where appropriate
+                for(int i=startRow; i <= endRow; ++i)
+                {
+                    int runStart = (i == startRow) ? startCol: 0;
+                    int runEnd = (i == endRow) ? endCol : mColumns;
+
+                    Arrays.fill(linkRows[i], runStart, runEnd, url);
+                }
+            }
+
+            //Add links into the link layer for later retrieval
+            for(int i=0; i<lineCount; ++i)
+                mLinkLayer.put(screenRow + i, linkRows[i]);
+        }
+        return lineCount;
+    }
 
     /**
      * Sends mouse wheel codes to terminal in response to fling.
@@ -359,6 +450,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         mTermSession = session;
 
         mKeyListener = new TermKeyListener(session);
+        session.setKeyListener(mKeyListener);
 
         // Do init now if it was deferred until a TermSession was attached
         if (mDeferInit) {
@@ -390,7 +482,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         if (mCursorBlink != 0) {
             mHandler.postDelayed(mBlinkCursor, CURSOR_BLINK_PERIOD);
         }
-        mKeyListener.onResume();
+        if (mKeyListener != null) {
+            mKeyListener.onResume();
+        }
     }
 
     /**
@@ -400,7 +494,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         if (mCursorBlink != 0) {
             mHandler.removeCallbacks(mBlinkCursor);
         }
-        mKeyListener.onPause();
+        if (mKeyListener != null) {
+            mKeyListener.onPause();
+        }
     }
 
     /**
@@ -469,7 +565,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 if (result < TermKeyListener.KEYCODE_OFFSET) {
                     mTermSession.write(result);
                 } else {
-                    mKeyListener.handleKeyCode(result - TermKeyListener.KEYCODE_OFFSET, getKeypadApplicationMode());
+                    mKeyListener.handleKeyCode(result - TermKeyListener.KEYCODE_OFFSET, null, getKeypadApplicationMode());
                 }
                 clearSpecialKeyStatus();
             }
@@ -750,7 +846,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     @Override
     protected int computeVerticalScrollRange() {
-        return mTranscriptScreen.getActiveRows();
+        return mEmulator.getScreen().getActiveRows();
     }
 
     /**
@@ -770,7 +866,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     @Override
     protected int computeVerticalScrollOffset() {
-        return mTranscriptScreen.getActiveRows() + mTopRow - mRows;
+        return mEmulator.getScreen().getActiveRows() + mTopRow - mRows;
     }
 
     /**
@@ -781,7 +877,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
         updateText();
 
-        mTranscriptScreen = session.getTranscriptScreen();
         mEmulator = session.getEmulator();
         session.setUpdateCallback(mUpdateNotify);
 
@@ -824,7 +919,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     public void page(int delta) {
         mTopRow =
-                Math.min(0, Math.max(-(mTranscriptScreen
+                Math.min(0, Math.max(-(mEmulator.getScreen()
                         .getActiveTranscriptRows()), mTopRow + mRows * delta));
         invalidate();
     }
@@ -953,7 +1048,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         }
 
         mTopRow =
-            Math.min(0, Math.max(-(mTranscriptScreen
+            Math.min(0, Math.max(-(mEmulator.getScreen()
                     .getActiveTranscriptRows()), mTopRow + deltaRows));
         invalidate();
 
@@ -972,7 +1067,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     public boolean onJumpTapUp(MotionEvent e1, MotionEvent e2) {
         // Scroll to top
-        mTopRow = -mTranscriptScreen.getActiveTranscriptRows();
+        mTopRow = -mEmulator.getScreen().getActiveTranscriptRows();
         invalidate();
         return true;
     }
@@ -991,7 +1086,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             mScroller.fling(0, mTopRow,
                     -(int) (velocityX * SCALE), -(int) (velocityY * SCALE),
                     0, 0,
-                    -mTranscriptScreen.getActiveTranscriptRows(), 0);
+                    -mEmulator.getScreen().getActiveTranscriptRows(), 0);
             // onScroll(e1, e2, 0.1f * velocityX, -0.1f * velocityY);
             post(mFlingRunner);
         }
@@ -1183,8 +1278,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     }
 
     private boolean handleHardwareControlKey(int keyCode, KeyEvent event) {
-        if (keyCode == TermKeyListener.KEYCODE_CTRL_LEFT ||
-            keyCode == TermKeyListener.KEYCODE_CTRL_RIGHT) {
+        if (keyCode == KeycodeConstants.KEYCODE_CTRL_LEFT ||
+            keyCode == KeycodeConstants.KEYCODE_CTRL_RIGHT) {
             if (LOG_KEY_EVENTS) {
                 Log.w(TAG, "handleHardwareControlKey " + keyCode);
             }
@@ -1285,6 +1380,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      *              view's size has not changed.
      */
     public void updateSize(boolean force) {
+        //Need to clear saved links on each display refresh
+        mLinkLayer.clear();
         if (mKnownSize) {
             int w = getWidth();
             int h = getHeight();
@@ -1332,6 +1429,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             effectiveImeBuffer += String.valueOf((char) combiningAccent);
         }
         int cursorStyle = mKeyListener.getCursorMode();
+
+        int linkLinesToSkip = 0; //for multi-line links
+
         for (int i = mTopRow; i < endLine; i++) {
             int cursorX = -1;
             if (i == cy && cursorVisible) {
@@ -1349,8 +1449,14 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                     selx2 = mColumns;
                 }
             }
-            mTranscriptScreen.drawText(i, canvas, x, y, mTextRenderer, cursorX, selx1, selx2, effectiveImeBuffer, cursorStyle);
+            mEmulator.getScreen().drawText(i, canvas, x, y, mTextRenderer, cursorX, selx1, selx2, effectiveImeBuffer, cursorStyle);
             y += mCharacterHeight;
+            //if no lines to skip, create links for the line being drawn
+            if(linkLinesToSkip == 0)
+                linkLinesToSkip = createLinks(i);
+
+            //createLinks always returns at least 1
+            --linkLinesToSkip;
         }
     }
 
@@ -1457,5 +1563,42 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     public void setMouseTracking(boolean flag) {
         mMouseTracking = flag;
+    }
+
+
+    /**
+     *
+     * Get the URL at the specified screen coordinates and return its string value
+     * @param x The x coordinate being queried (from 0 to screen width)
+     * @param y The y coordinate being queried (from 0 to screen height)
+     * @return
+     */
+    public String getURLat(float x, float y)
+    {
+        float w = getWidth();
+        float h = getHeight();
+
+        //Check for division by zero
+        //If width or height is zero, there are probably no links around, so return null.
+        if(w == 0 || h == 0)
+            return null;
+
+        //Get fraction of total screen
+        float x_pos = x / w;
+        float y_pos = y / h;
+
+        //Convert to integer row/column index
+        int row = (int)Math.floor(y_pos * mRows);
+        int col = (int)Math.floor(x_pos * mColumns);
+
+        //Grab row from link layer
+        URLSpan [] linkRow = mLinkLayer.get(row);
+        URLSpan link;
+
+        //If row exists, and link exists at column, return it
+        if(linkRow != null && (link = linkRow[col]) != null)
+            return link.getURL();
+        else
+            return null;
     }
 }
