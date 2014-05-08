@@ -2,13 +2,17 @@
 # You have to run this once in order for ant builds to work
 set -e
 
+# Check that the "ant" tool is installed. (It's not installed on OSX 10.9)
+
+command -v ant >/dev/null 2>&1 || { echo >&2 "Please install ant: sudo port install apache-ant"; exit 1; }
+
 if [ -z "${ANDROID_SDK_ROOT+xxx}" ]; then
 	echo "Please define ANDROID_SDK_ROOT to point to the Android SDK"
 	exit 1
 fi
 
 if [ ! -d "$ANDROID_SDK_ROOT" ]; then
-    echo "The directory $ANDROID_SDK_ROOT = ${ANDROID_SDK_ROOT} does not exist."
+    echo "The directory ANDROID_SDK_ROOT = ${ANDROID_SDK_ROOT} does not exist."
     exit 1
 fi
 
@@ -23,7 +27,7 @@ ANDROID_TARGET=android-11
 
 # Make sure the target SDK is installed and up-to-date.
 
-$ANDROID update sdk -a -u -t tools,platform-tools,build-tools-17.0.0,$ANDROID_TARGET
+$ANDROID update sdk -a -u -t tools,platform-tools,build-tools-19.0.1,$ANDROID_TARGET
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ATE_ROOT="$( cd $DIR/.. && pwd )"

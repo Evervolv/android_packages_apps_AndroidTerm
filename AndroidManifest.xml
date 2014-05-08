@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="jackpal.androidterm"
-      android:versionName="1.0.54"
-      android:versionCode="55"
+      android:versionName="1.0.59"
+      android:versionCode="60"
       android:installLocation="auto">
     <uses-sdk android:minSdkVersion="3" android:targetSdkVersion="11" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -25,7 +25,8 @@
                 android:permissionGroup="android.permission-group.SYSTEM_TOOLS"
                 android:protectionLevel="dangerous" />
     <application android:icon="@drawable/ic_launcher"
-                android:label="@string/application_terminal">
+                android:label="@string/application_terminal"
+                android:hardwareAccelerated="true">
         <activity android:name="Term"
                 android:theme="@style/Theme"
                 android:launchMode="singleTask"
@@ -64,7 +65,7 @@
             </intent-filter>
         </activity-alias>
         <activity android:name="TermPreferences"
-                android:label="@string/preferences" />
+                android:label="@string/preferences"/>
         <activity android:name="WindowList"
                 android:label="@string/window_list" />
         <service android:name="TermService" />
